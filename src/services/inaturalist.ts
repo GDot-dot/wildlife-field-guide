@@ -62,8 +62,8 @@ async function getBirdSound(scientificName: string) {
 }
 
 export async function getNearbySpecies(lat: number, lng: number): Promise<Animal[]> {
-  // taxon_id: 3 (Birds/鳥類), 26036 (Reptiles/爬蟲類)
-  const url = `https://api.inaturalist.org/v1/observations/species_counts?lat=${lat}&lng=${lng}&radius=5&taxon_id=3,26036&locale=zh-TW&per_page=12`;
+  // iconic_taxa: Aves(鳥類), Reptilia(爬蟲類), Insecta(昆蟲/蜻蜓/甲蟲/蝴蝶), Arachnida(蜘蛛)
+  const url = `https://api.inaturalist.org/v1/observations/species_counts?lat=${lat}&lng=${lng}&radius=5&iconic_taxa=Aves,Reptilia,Insecta,Arachnida&locale=zh-TW&per_page=16`;
   
   try {
     const response = await fetch(url);
