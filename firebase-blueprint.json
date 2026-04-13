@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "CollectionRecord": {
+      "title": "Collection Record",
+      "description": "A record of a user collecting a specific animal.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who collected the animal."
+        },
+        "animalId": {
+          "type": "string",
+          "description": "The ID of the collected animal."
+        },
+        "animalName": {
+          "type": "string",
+          "description": "The name of the collected animal."
+        },
+        "animalImageUrl": {
+          "type": "string",
+          "description": "The image URL of the collected animal."
+        },
+        "soundUrl": {
+          "type": "string",
+          "description": "The sound URL of the collected animal."
+        },
+        "characteristics": {
+          "type": "string",
+          "description": "The characteristics of the collected animal."
+        },
+        "diet": {
+          "type": "string",
+          "description": "The diet of the collected animal."
+        },
+        "habitat": {
+          "type": "string",
+          "description": "The habitat of the collected animal."
+        },
+        "description": {
+          "type": "string",
+          "description": "The observation description."
+        },
+        "collectedAt": {
+          "type": "timestamp",
+          "description": "When the animal was collected."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional notes by the user."
+        }
+      },
+      "required": ["userId", "animalId", "collectedAt"]
+    }
+  },
+  "firestore": {
+    "/user_collections/{recordId}": {
+      "schema": { "$ref": "#/entities/CollectionRecord" },
+      "description": "Stores all collection records."
+    }
+  }
+}
