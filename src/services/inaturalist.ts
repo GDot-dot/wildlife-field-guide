@@ -61,14 +61,14 @@ async function getBirdSound(scientificName: string) {
   return undefined;
 }
 
-export async function getNearbySpecies(lat: number, lng: number, page: number = 1, category: string = 'All'): Promise<Animal[]> {
+export async function getNearbySpecies(lat: number, lng: number, page: number = 1, category: string = 'All', radius: number = 5): Promise<Animal[]> {
   let taxa = 'Aves,Reptilia,Insecta,Arachnida';
   if (category === 'Birds') taxa = 'Aves';
   if (category === 'Insects') taxa = 'Insecta';
   if (category === 'Reptiles') taxa = 'Reptilia';
   if (category === 'Spiders') taxa = 'Arachnida';
 
-  const url = `https://api.inaturalist.org/v1/observations/species_counts?lat=${lat}&lng=${lng}&radius=5&iconic_taxa=${taxa}&locale=zh-TW&per_page=20&page=${page}`;
+  const url = `https://api.inaturalist.org/v1/observations/species_counts?lat=${lat}&lng=${lng}&radius=${radius}&iconic_taxa=${taxa}&locale=zh-TW&per_page=20&page=${page}`;
   
   try {
     const response = await fetch(url);

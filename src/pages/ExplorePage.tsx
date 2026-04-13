@@ -26,6 +26,7 @@ export function ExplorePage() {
   
   const [page, setPage] = useState(1);
   const [category, setCategory] = useState('All');
+  const [radius, setRadius] = useState(5);
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
   const [hasMore, setHasMore] = useState(true);
 
@@ -50,9 +51,9 @@ export function ExplorePage() {
     return () => unsubscribe();
   }, [user]);
 
-  const fetchSpecies = async (lat: number, lng: number, targetPage: number, targetCategory: string, append: boolean = false) => {
+  const fetchSpecies = async (lat: number, lng: number, targetPage: number, targetCategory: string, targetRadius: number, append: boolean = false) => {
     try {
-      const nearbyAnimals = await getNearbySpecies(lat, lng, targetPage, targetCategory);
+      const nearbyAnimals = await getNearbySpecies(lat, lng, targetPage, targetCategory, targetRadius);
       if (append) {
         setAnimals(prev => [...prev, ...nearbyAnimals]);
       } else {
@@ -81,7 +82,7 @@ export function ExplorePage() {
       async (position) => {
         const { latitude, longitude } = position.coords;
         setCurrentLocation({ lat: latitude, lng: longitude });
-        await fetchSpecies(latitude, longitude, 1, category, false);
+        await fetchSpecies(latitude, longitude, 1, category, radius, false);
         setLoadingLocation(false);
       },
       (error) => {
@@ -98,7 +99,7 @@ export function ExplorePage() {
     setLoadingMore(true);
     const nextPage = page + 1;
     setPage(nextPage);
-    await fetchSpecies(currentLocation.lat, currentLocation.lng, nextPage, category, true);
+    await fetchSpecies(currentLocation.lat, currentLocation.lng, nextPage, category, radius, true);
     setLoadingMore(false);
   };
 
@@ -108,7 +109,18 @@ export function ExplorePage() {
       setLoadingLocation(true);
       setPage(1);
       setHasMore(true);
-      await fetchSpecies(currentLocation.lat, currentLocation.lng, 1, newCategory, false);
+      await fetchSpecies(currentLocation.lat, currentLocation.lng, 1, newCategory, radius, false);
+      setLoadingLocation(false);
+    }
+  };
+
+  const handleRadiusChange = async (newRadius: number) => {
+    setRadius(newRadius);
+    if (currentLocation) {
+      setLoadingLocation(true);
+      setPage(1);
+      setHasMore(true);
+      await fetchSpecies(currentLocation.lat, currentLocation.lng, 1, category, newRadius, false);
       setLoadingLocation(false);
     }
   };
@@ -165,24 +177,46 @@ export function ExplorePage() {
       </div>
 
       {currentLocation && (
-        <div className="mb-6 flex flex-wrap gap-2">
-          <div className="flex items-center text-gray-500 mr-2">
-            <Filter className="w-4 h-4 mr-1" />
-            <span className="text-sm font-medium">分類：</span>
+        <div className="mb-6 flex flex-col sm:flex-row gap-4 sm:items-center justify-between bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex items-center text-gray-500 mr-2">
+              <Filter className="w-4 h-4 mr-1" />
+              <span className="text-sm font-medium">分類：</span>
+            </div>
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => handleCategoryChange(cat.id)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  category === cat.id 
+                    ? 'bg-green-100 text-green-800 border border-green-200' 
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
           </div>
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => handleCategoryChange(cat.id)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                category === cat.id 
-                  ? 'bg-green-100 text-green-800 border border-green-200' 
-                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+          
+          <div className="flex flex-wrap gap-2 items-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-3 sm:pt-0 sm:pl-4">
+            <div className="flex items-center text-gray-500 mr-2">
+              <MapPin className="w-4 h-4 mr-1" />
+              <span className="text-sm font-medium">範圍：</span>
+            </div>
+            {[2, 5].map(r => (
+              <button
+                key={r}
+                onClick={() => handleRadiusChange(r)}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  radius === r 
+                    ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {r} 公里
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
