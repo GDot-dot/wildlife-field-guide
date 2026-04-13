@@ -6,14 +6,28 @@ import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } fr
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
 import { getNearbySpecies } from '../services/inaturalist';
 import { Animal } from '../types';
-import { MapPin, Loader2, AlertCircle } from 'lucide-react';
+import { MapPin, Loader2, AlertCircle, Filter } from 'lucide-react';
+
+const CATEGORIES = [
+  { id: 'All', label: '全部' },
+  { id: 'Birds', label: '鳥類' },
+  { id: 'Insects', label: '昆蟲' },
+  { id: 'Reptiles', label: '爬蟲類' },
+  { id: 'Spiders', label: '蜘蛛' }
+];
 
 export function ExplorePage() {
   const { user } = useAuth();
   const [collectedIds, setCollectedIds] = useState<Set<string>>(new Set());
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [loadingLocation, setLoadingLocation] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  
+  const [page, setPage] = useState(1);
+  const [category, setCategory] = useState('All');
+  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
     if (!user) {
@@ -36,9 +50,26 @@ export function ExplorePage() {
     return () => unsubscribe();
   }, [user]);
 
+  const fetchSpecies = async (lat: number, lng: number, targetPage: number, targetCategory: string, append: boolean = false) => {
+    try {
+      const nearbyAnimals = await getNearbySpecies(lat, lng, targetPage, targetCategory);
+      if (append) {
+        setAnimals(prev => [...prev, ...nearbyAnimals]);
+      } else {
+        setAnimals(nearbyAnimals);
+      }
+      setHasMore(nearbyAnimals.length === 20); // 如果回傳數量等於 per_page，代表可能還有下一頁
+    } catch (error) {
+      console.error(error);
+      setLocationError('無法取得附近的生物資料，請稍後再試');
+    }
+  };
+
   const handleGetLocation = () => {
     setLoadingLocation(true);
     setLocationError(null);
+    setPage(1);
+    setHasMore(true);
 
     if (!('geolocation' in navigator)) {
       setLocationError('您的瀏覽器不支援定位功能');
@@ -48,16 +79,10 @@ export function ExplorePage() {
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          const nearbyAnimals = await getNearbySpecies(latitude, longitude);
-          setAnimals(nearbyAnimals);
-        } catch (error) {
-          console.error(error);
-          setLocationError('無法取得附近的生物資料，請稍後再試');
-        } finally {
-          setLoadingLocation(false);
-        }
+        const { latitude, longitude } = position.coords;
+        setCurrentLocation({ lat: latitude, lng: longitude });
+        await fetchSpecies(latitude, longitude, 1, category, false);
+        setLoadingLocation(false);
       },
       (error) => {
         console.error(error);
@@ -66,6 +91,26 @@ export function ExplorePage() {
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
+  };
+
+  const handleLoadMore = async () => {
+    if (!currentLocation || loadingMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    setPage(nextPage);
+    await fetchSpecies(currentLocation.lat, currentLocation.lng, nextPage, category, true);
+    setLoadingMore(false);
+  };
+
+  const handleCategoryChange = async (newCategory: string) => {
+    setCategory(newCategory);
+    if (currentLocation) {
+      setLoadingLocation(true);
+      setPage(1);
+      setHasMore(true);
+      await fetchSpecies(currentLocation.lat, currentLocation.lng, 1, newCategory, false);
+      setLoadingLocation(false);
+    }
   };
 
   const handleCollect = async (animal: Animal) => {
@@ -102,7 +147,7 @@ export function ExplorePage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">探索地區生物</h1>
           <p className="text-gray-600">
-            讀取您的 GPS 定位，尋找附近出沒的鳥類與爬蟲類。
+            讀取您的 GPS 定位，尋找附近出沒的鳥類、昆蟲與爬蟲類。
           </p>
         </div>
         <button
@@ -118,6 +163,28 @@ export function ExplorePage() {
           {loadingLocation ? '正在尋找...' : '尋找附近生物'}
         </button>
       </div>
+
+      {currentLocation && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <div className="flex items-center text-gray-500 mr-2">
+            <Filter className="w-4 h-4 mr-1" />
+            <span className="text-sm font-medium">分類：</span>
+          </div>
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => handleCategoryChange(cat.id)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                category === cat.id 
+                  ? 'bg-green-100 text-green-800 border border-green-200' 
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {locationError && (
         <div className="mb-8 p-4 bg-red-50 text-red-700 rounded-xl flex items-center gap-3 border border-red-100">
@@ -135,16 +202,43 @@ export function ExplorePage() {
           <p className="text-gray-500">我們將使用 iNaturalist API 尋找您附近的真實觀測紀錄</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {animals.map((animal) => (
-            <AnimalCard
-              key={animal.id}
-              animal={animal}
-              isCollected={collectedIds.has(animal.id)}
-              onCollect={handleCollect}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {animals.map((animal, index) => (
+              <AnimalCard
+                key={`${animal.id}-${index}`}
+                animal={animal}
+                isCollected={collectedIds.has(animal.id)}
+                onCollect={handleCollect}
+              />
+            ))}
+          </div>
+          
+          {animals.length > 0 && hasMore && (
+            <div className="mt-8 flex justify-center">
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="inline-flex items-center px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin text-gray-400" />
+                    載入中...
+                  </>
+                ) : (
+                  '載入更多'
+                )}
+              </button>
+            </div>
+          )}
+          
+          {animals.length > 0 && !hasMore && !loadingLocation && (
+            <div className="mt-8 text-center text-gray-500 text-sm">
+              已經到底囉！沒有更多資料了。
+            </div>
+          )}
+        </>
       )}
     </div>
   );

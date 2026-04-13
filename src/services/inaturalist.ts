@@ -43,8 +43,8 @@ async function enrichAnimalDataWithAI(animals: Partial<Animal>[]) {
 async function getBirdSound(scientificName: string) {
   try {
     const targetUrl = `https://xeno-canto.org/api/2/recordings?query=${encodeURIComponent(scientificName)}`;
-    // Use a CORS proxy to avoid "Failed to fetch" errors due to CORS restrictions
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+    // Use a more reliable CORS proxy
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
     const res = await fetch(proxyUrl);
     
     if (!res.ok) {
@@ -61,9 +61,14 @@ async function getBirdSound(scientificName: string) {
   return undefined;
 }
 
-export async function getNearbySpecies(lat: number, lng: number): Promise<Animal[]> {
-  // iconic_taxa: Aves(鳥類), Reptilia(爬蟲類), Insecta(昆蟲/蜻蜓/甲蟲/蝴蝶), Arachnida(蜘蛛)
-  const url = `https://api.inaturalist.org/v1/observations/species_counts?lat=${lat}&lng=${lng}&radius=5&iconic_taxa=Aves,Reptilia,Insecta,Arachnida&locale=zh-TW&per_page=16`;
+export async function getNearbySpecies(lat: number, lng: number, page: number = 1, category: string = 'All'): Promise<Animal[]> {
+  let taxa = 'Aves,Reptilia,Insecta,Arachnida';
+  if (category === 'Birds') taxa = 'Aves';
+  if (category === 'Insects') taxa = 'Insecta';
+  if (category === 'Reptiles') taxa = 'Reptilia';
+  if (category === 'Spiders') taxa = 'Arachnida';
+
+  const url = `https://api.inaturalist.org/v1/observations/species_counts?lat=${lat}&lng=${lng}&radius=5&iconic_taxa=${taxa}&locale=zh-TW&per_page=20&page=${page}`;
   
   try {
     const response = await fetch(url);
