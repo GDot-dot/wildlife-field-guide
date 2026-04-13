@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0518432758",
-  "appId": "1:797382006430:web:08bf7ab2e41b03170c0d8f",
-  "apiKey": "AIzaSyBDTC3JogX7NqiM2HmlgWBOG8LGAY62yCE",
-  "authDomain": "gen-lang-client-0518432758.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-220b4af3-d25d-494c-9de3-8e771696e4da",
-  "storageBucket": "gen-lang-client-0518432758.firebasestorage.app",
-  "messagingSenderId": "797382006430",
-  "measurementId": ""
+  "projectId": "wildlife-field-guide",
+  "appId": "1:763386140973:web:388859dd994c5ef2f25ba4",
+  "apiKey": "AIzaSyAm35LxDBIMJglpFzF_MLu7NMXfv_tWTgU",
+  "authDomain": "wildlife-field-guide.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "wildlife-field-guide.firebasestorage.app",
+  "messagingSenderId": "763386140973",
+  "measurementId": "G-QLE8YVJ1DK"
 }
