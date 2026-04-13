@@ -22,7 +22,7 @@ export function Navbar() {
               <div className="bg-green-100 p-2 rounded-xl group-hover:bg-green-200 transition-colors">
                 <Leaf className="w-6 h-6 text-green-600" />
               </div>
-              <span className="font-bold text-xl text-green-900 tracking-tight">生態圖鑑</span>
+              <span className="font-bold text-xl text-green-900 tracking-tight">生態圖鑑 (Wildlife Field Guide)V1.0</span>
             </Link>
             
             <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
