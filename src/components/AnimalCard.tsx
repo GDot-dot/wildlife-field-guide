@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Animal } from '../types';
 import { CheckCircle2, PlusCircle, Trash2 } from 'lucide-react';
 import { cn } from './Navbar';
@@ -12,6 +12,8 @@ interface AnimalCardProps {
 }
 
 export function AnimalCard({ animal, isCollected, onCollect, onUncollect, collectedAt }: AnimalCardProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   const rarityColors = {
     Common: 'bg-gray-100 text-gray-700 border-gray-200',
     Uncommon: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -105,11 +107,25 @@ export function AnimalCard({ animal, isCollected, onCollect, onUncollect, collec
               )}
               {onUncollect && (
                 <button
-                  onClick={() => onUncollect(animal)}
-                  className="inline-flex items-center justify-center w-full py-1.5 rounded-xl bg-red-50 text-red-600 font-medium hover:bg-red-100 transition-colors text-sm"
+                  onClick={() => {
+                    if (confirmDelete) {
+                      onUncollect(animal);
+                      setConfirmDelete(false);
+                    } else {
+                      setConfirmDelete(true);
+                      setTimeout(() => setConfirmDelete(false), 3000);
+                    }
+                  }}
+                  onMouseLeave={() => setConfirmDelete(false)}
+                  className={cn(
+                    "inline-flex items-center justify-center w-full py-1.5 rounded-xl font-medium transition-colors text-sm",
+                    confirmDelete 
+                      ? "bg-red-600 text-white hover:bg-red-700 shadow-sm" 
+                      : "bg-red-50 text-red-600 hover:bg-red-100"
+                  )}
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
-                  取消蒐集
+                  {confirmDelete ? '再按一次確認刪除' : '取消蒐集'}
                 </button>
               )}
             </div>

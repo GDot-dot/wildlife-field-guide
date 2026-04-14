@@ -3,7 +3,7 @@ import { AnimalCard } from '../components/AnimalCard';
 import { SkeletonCard } from '../components/SkeletonCard';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
 import { getNearbySpecies } from '../services/inaturalist';
 import { Animal } from '../types';
@@ -156,33 +156,23 @@ export function ExplorePage() {
       const recordId = `${user.uid}_${animal.id}`;
       const dataToSave: any = {
         userId: user.uid,
-        animalId: animal.id,
-        animalName: animal.name,
-        animalImageUrl: animal.imageUrl,
-        description: animal.description,
-        habitat: animal.habitat,
+        animalId: String(animal.id),
+        animalName: animal.name || '',
+        animalImageUrl: animal.imageUrl || '',
+        description: animal.description || '',
+        habitat: animal.habitat || '',
         category: animal.category || 'Other',
-        lat: currentLocation?.lat || null,
-        lng: currentLocation?.lng || null,
+        lat: currentLocation?.lat ?? null,
+        lng: currentLocation?.lng ?? null,
         collectedAt: serverTimestamp()
       };
       
-      if (animal.characteristics) dataToSave.characteristics = animal.characteristics;
-      if (animal.diet) dataToSave.diet = animal.diet;
+      if (animal.characteristics) dataToSave.characteristics = String(animal.characteristics);
+      if (animal.diet) dataToSave.diet = String(animal.diet);
 
       await setDoc(doc(db, 'user_collections', recordId), dataToSave);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `user_collections/${user.uid}_${animal.id}`);
-    }
-  };
-
-  const handleUncollect = async (animal: Animal) => {
-    if (!user) return;
-    try {
-      const recordId = `${user.uid}_${animal.id}`;
-      await deleteDoc(doc(db, 'user_collections', recordId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `user_collections/${user.uid}_${animal.id}`);
     }
   };
 
@@ -292,7 +282,6 @@ export function ExplorePage() {
                 animal={animal}
                 isCollected={collectedIds.has(animal.id)}
                 onCollect={handleCollect}
-                onUncollect={handleUncollect}
               />
             ))}
           </div>

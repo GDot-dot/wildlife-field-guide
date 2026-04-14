@@ -48,6 +48,18 @@
         "notes": {
           "type": "string",
           "description": "Optional notes by the user."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the animal."
+        },
+        "lat": {
+          "type": "number",
+          "description": "The latitude where it was collected."
+        },
+        "lng": {
+          "type": "number",
+          "description": "The longitude where it was collected."
         }
       },
       "required": ["userId", "animalId", "collectedAt"]
