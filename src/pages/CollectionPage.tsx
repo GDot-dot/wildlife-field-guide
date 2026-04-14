@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AnimalCard } from '../components/AnimalCard';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
 import { Link } from 'react-router-dom';
 import { BookOpen, Leaf, Map as MapIcon, PieChart, List, Award, Search } from 'lucide-react';
@@ -30,6 +30,18 @@ interface CollectedRecord {
 }
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b'];
+
+const CATEGORY_TRANSLATIONS: Record<string, string> = {
+  'All': '全部',
+  'Birds': '鳥類',
+  'Insects': '昆蟲',
+  'Reptiles': '爬蟲類',
+  'Spiders': '蜘蛛',
+  'Plants': '植物',
+  'Flowers': '花',
+  'Trees': '樹木',
+  'Other': '其他 (早期紀錄)'
+};
 
 export function CollectionPage() {
   const { user } = useAuth();
@@ -110,16 +122,20 @@ export function CollectionPage() {
     return acc;
   }, {} as Record<string, number>);
 
-  const pieData = Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
+  const pieData = Object.entries(categoryCounts).map(([name, value]) => ({ 
+    name: CATEGORY_TRANSLATIONS[name] || name, 
+    value 
+  }));
 
   // Badges logic
-  const badges = [];
-  if (collectedRecords.length >= 1) badges.push({ icon: '🌱', name: '生態新手', desc: '收集第1隻生物' });
-  if (collectedRecords.length >= 10) badges.push({ icon: '🌟', name: '生態探索者', desc: '收集10隻生物' });
-  if (collectedRecords.length >= 30) badges.push({ icon: '👑', name: '生態大師', desc: '收集30隻生物' });
-  if ((categoryCounts['Birds'] || 0) >= 5) badges.push({ icon: '🐦', name: '初級賞鳥員', desc: '收集5種鳥類' });
-  if ((categoryCounts['Insects'] || 0) >= 5) badges.push({ icon: '🐛', name: '昆蟲觀察家', desc: '收集5種昆蟲' });
-  if ((categoryCounts['Plants'] || 0) >= 5) badges.push({ icon: '🌿', name: '植物學家', desc: '收集5種植物' });
+  const ALL_BADGES = [
+    { id: 'novice', icon: '🌱', name: '生態新手', desc: '收集第1隻生物', condition: (total: number) => total >= 1 },
+    { id: 'explorer', icon: '🌟', name: '生態探索者', desc: '收集10隻生物', condition: (total: number) => total >= 10 },
+    { id: 'master', icon: '👑', name: '生態大師', desc: '收集30隻生物', condition: (total: number) => total >= 30 },
+    { id: 'bird', icon: '🐦', name: '初級賞鳥員', desc: '收集5種鳥類', condition: (total: number, counts: Record<string, number>) => (counts['Birds'] || 0) >= 5 },
+    { id: 'insect', icon: '🐛', name: '昆蟲觀察家', desc: '收集5種昆蟲', condition: (total: number, counts: Record<string, number>) => (counts['Insects'] || 0) >= 5 },
+    { id: 'plant', icon: '🌿', name: '植物學家', desc: '收集5種植物', condition: (total: number, counts: Record<string, number>) => (counts['Plants'] || 0) >= 5 },
+  ];
 
   // Filter records
   const filteredRecords = collectedRecords.filter(record => {
@@ -133,6 +149,16 @@ export function CollectionPage() {
 
   // Map center
   const mapCenter = collectedRecords.find(r => r.animal.lat && r.animal.lng)?.animal;
+
+  const handleUncollect = async (animal: Animal) => {
+    if (!user) return;
+    try {
+      const recordId = `${user.uid}_${animal.id}`;
+      await deleteDoc(doc(db, 'user_collections', recordId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `user_collections/${user.uid}_${animal.id}`);
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -151,22 +177,33 @@ export function CollectionPage() {
         </div>
 
         {/* Badges Section */}
-        {badges.length > 0 && (
-          <div className="pt-4 border-t border-gray-100">
-            <div className="flex items-center gap-2 mb-3">
-              <Award className="w-5 h-5 text-yellow-500" />
-              <h3 className="font-bold text-gray-800">解鎖徽章</h3>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {badges.map((badge, i) => (
-                <div key={i} className="flex items-center gap-2 bg-yellow-50 border border-yellow-100 px-3 py-1.5 rounded-lg" title={badge.desc}>
-                  <span className="text-xl">{badge.icon}</span>
-                  <span className="text-sm font-medium text-yellow-800">{badge.name}</span>
-                </div>
-              ))}
-            </div>
+        <div className="pt-4 border-t border-gray-100">
+          <div className="flex items-center gap-2 mb-3">
+            <Award className="w-5 h-5 text-yellow-500" />
+            <h3 className="font-bold text-gray-800">成就徽章</h3>
           </div>
-        )}
+          <div className="flex flex-wrap gap-3">
+            {ALL_BADGES.map((badge) => {
+              const isUnlocked = badge.condition(collectedRecords.length, categoryCounts);
+              return (
+                <div 
+                  key={badge.id} 
+                  className={`flex items-center gap-2 border px-3 py-1.5 rounded-lg transition-all cursor-help ${
+                    isUnlocked 
+                      ? 'bg-yellow-50 border-yellow-200 shadow-sm' 
+                      : 'bg-gray-50 border-gray-200 opacity-50 grayscale'
+                  }`} 
+                  title={`${badge.desc}${isUnlocked ? ' (已解鎖)' : ' (未解鎖)'}`}
+                >
+                  <span className="text-xl">{badge.icon}</span>
+                  <span className={`text-sm font-medium ${isUnlocked ? 'text-yellow-800' : 'text-gray-500'}`}>
+                    {badge.name}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -244,7 +281,7 @@ export function CollectionPage() {
                           : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                       }`}
                     >
-                      {cat === 'All' ? '全部' : cat}
+                      {CATEGORY_TRANSLATIONS[cat] || cat}
                     </button>
                   ))}
                 </div>
@@ -257,6 +294,7 @@ export function CollectionPage() {
                     animal={record.animal}
                     isCollected={true}
                     collectedAt={record.collectedAt}
+                    onUncollect={handleUncollect}
                   />
                 ))}
               </div>

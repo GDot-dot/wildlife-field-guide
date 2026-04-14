@@ -1,16 +1,17 @@
 import React from 'react';
 import { Animal } from '../types';
-import { CheckCircle2, PlusCircle } from 'lucide-react';
+import { CheckCircle2, PlusCircle, Trash2 } from 'lucide-react';
 import { cn } from './Navbar';
 
 interface AnimalCardProps {
   animal: Animal;
   isCollected: boolean;
   onCollect?: (animal: Animal) => void;
+  onUncollect?: (animal: Animal) => void;
   collectedAt?: Date;
 }
 
-export function AnimalCard({ animal, isCollected, onCollect, collectedAt }: AnimalCardProps) {
+export function AnimalCard({ animal, isCollected, onCollect, onUncollect, collectedAt }: AnimalCardProps) {
   const rarityColors = {
     Common: 'bg-gray-100 text-gray-700 border-gray-200',
     Uncommon: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -95,9 +96,22 @@ export function AnimalCard({ animal, isCollected, onCollect, collectedAt }: Anim
             </button>
           )}
           
-          {isCollected && collectedAt && (
-            <div className="text-xs text-green-600 font-medium bg-green-50 px-3 py-2 rounded-lg w-full text-center">
-              已於 {collectedAt.toLocaleDateString()} 發現
+          {isCollected && (
+            <div className="flex flex-col gap-2 w-full">
+              {collectedAt && (
+                <div className="text-xs text-green-600 font-medium bg-green-50 px-3 py-2 rounded-lg text-center">
+                  已於 {collectedAt.toLocaleDateString()} 發現
+                </div>
+              )}
+              {onUncollect && (
+                <button
+                  onClick={() => onUncollect(animal)}
+                  className="inline-flex items-center justify-center w-full py-1.5 rounded-xl bg-red-50 text-red-600 font-medium hover:bg-red-100 transition-colors text-sm"
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  取消蒐集
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -3,7 +3,7 @@ import { AnimalCard } from '../components/AnimalCard';
 import { SkeletonCard } from '../components/SkeletonCard';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
 import { getNearbySpecies } from '../services/inaturalist';
 import { Animal } from '../types';
@@ -176,6 +176,16 @@ export function ExplorePage() {
     }
   };
 
+  const handleUncollect = async (animal: Animal) => {
+    if (!user) return;
+    try {
+      const recordId = `${user.uid}_${animal.id}`;
+      await deleteDoc(doc(db, 'user_collections', recordId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `user_collections/${user.uid}_${animal.id}`);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -282,6 +292,7 @@ export function ExplorePage() {
                 animal={animal}
                 isCollected={collectedIds.has(animal.id)}
                 onCollect={handleCollect}
+                onUncollect={handleUncollect}
               />
             ))}
           </div>
