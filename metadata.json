@@ -1,5 +1,5 @@
 {
-  "name": "生態圖鑑 (Wildlife Field Guide)V2.0",
+  "name": "生態圖鑑 (Wildlife Field Guide)V2.5",
   "description": "一個地區生物與鳥類生活圖鑑，支援 Google 帳號登入與個人化蒐集功能，適合部署於 GitHub Pages。",
   "requestFramePermissions": [
     "geolocation"

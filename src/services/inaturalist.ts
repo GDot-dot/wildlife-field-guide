@@ -4,11 +4,13 @@ import { GoogleGenAI } from '@google/genai';
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 async function enrichAnimalDataWithAI(animals: Partial<Animal>[]) {
+  if (animals.length === 0) return {};
+
   const prompt = `
-  請為以下動物提供繁體中文的特色說明、棲息地與食性。
+  請為以下生物(動物或植物)提供繁體中文的特色說明、棲息地與食性(若是植物請填寫生長環境或特徵)。
   請回傳 JSON 格式，key 為學名 (scientificName)，value 為包含 characteristics, habitat, diet 的物件。
-  如果找不到該動物的資料，請盡量根據其科屬推測或填寫「暫無資料」。
-  動物列表：
+  如果找不到該物種的資料，請盡量根據其科屬推測或填寫「暫無資料」。
+  物種列表：
   ${animals.map(a => a.scientificName).join('\n')}
   
   JSON 格式範例：
@@ -62,13 +64,18 @@ async function getBirdSound(scientificName: string) {
 }
 
 export async function getNearbySpecies(lat: number, lng: number, page: number = 1, category: string = 'All', radius: number = 5): Promise<Animal[]> {
-  let taxa = 'Aves,Reptilia,Insecta,Arachnida';
+  let taxa = 'Aves,Reptilia,Insecta,Arachnida,Plantae';
+  let taxonIdParam = '';
+  
   if (category === 'Birds') taxa = 'Aves';
-  if (category === 'Insects') taxa = 'Insecta';
-  if (category === 'Reptiles') taxa = 'Reptilia';
-  if (category === 'Spiders') taxa = 'Arachnida';
+  else if (category === 'Insects') taxa = 'Insecta';
+  else if (category === 'Reptiles') taxa = 'Reptilia';
+  else if (category === 'Spiders') taxa = 'Arachnida';
+  else if (category === 'Flowers') { taxa = ''; taxonIdParam = '&taxon_id=47125'; } // 被子植物 (Angiospermae)
+  else if (category === 'Trees') { taxa = ''; taxonIdParam = '&taxon_id=47126'; } // 植物界 (Plantae)
 
-  const url = `https://api.inaturalist.org/v1/observations/species_counts?lat=${lat}&lng=${lng}&radius=${radius}&iconic_taxa=${taxa}&locale=zh-TW&per_page=20&page=${page}`;
+  const taxaParam = taxa ? `&iconic_taxa=${taxa}` : '';
+  const url = `https://api.inaturalist.org/v1/observations/species_counts?lat=${lat}&lng=${lng}&radius=${radius}${taxaParam}${taxonIdParam}&locale=zh-TW&per_page=20&page=${page}`;
   
   try {
     const response = await fetch(url);
@@ -98,20 +105,59 @@ export async function getNearbySpecies(lat: number, lng: number, page: number = 
       };
     });
 
-    // Enrich with AI
-    const aiData = await enrichAnimalDataWithAI(baseAnimals);
+    const CACHE_PREFIX = 'wildlife_cache_v2_';
+    const uncachedAnimals: any[] = [];
+    const cachedData: Record<string, any> = {};
 
-    // Fetch sounds concurrently
+    baseAnimals.forEach((animal: any) => {
+      const cached = localStorage.getItem(CACHE_PREFIX + animal.scientificName);
+      if (cached) {
+        try {
+          cachedData[animal.scientificName] = JSON.parse(cached);
+        } catch (e) {
+          uncachedAnimals.push(animal);
+        }
+      } else {
+        uncachedAnimals.push(animal);
+      }
+    });
+
+    // Enrich with AI only for uncached
+    let aiData: Record<string, any> = {};
+    if (uncachedAnimals.length > 0) {
+      aiData = await enrichAnimalDataWithAI(uncachedAnimals);
+    }
+
+    // Fetch sounds concurrently for uncached
     const animalsWithSoundsAndAI = await Promise.all(baseAnimals.map(async (animal: any) => {
-      const soundUrl = await getBirdSound(animal.scientificName);
+      if (cachedData[animal.scientificName]) {
+        return {
+          ...animal,
+          ...cachedData[animal.scientificName]
+        };
+      }
+
+      // 只有鳥類或全部時才去 xeno-canto 找聲音，節省時間與資源
+      let soundUrl = undefined;
+      if (category === 'Birds' || category === 'All') {
+         soundUrl = await getBirdSound(animal.scientificName);
+      }
+      
       const enriched = aiData[animal.scientificName] || {};
       
-      return {
-        ...animal,
+      const additionalData = {
         soundUrl,
         characteristics: enriched.characteristics || '暫無資料',
         habitat: enriched.habitat || animal.habitat,
         diet: enriched.diet || '暫無資料',
+      };
+
+      // 存入快取
+      localStorage.setItem(CACHE_PREFIX + animal.scientificName, JSON.stringify(additionalData));
+
+      return {
+        ...animal,
+        ...additionalData
       };
     }));
 

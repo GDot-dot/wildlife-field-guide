@@ -13,7 +13,9 @@ const CATEGORIES = [
   { id: 'Birds', label: '鳥類' },
   { id: 'Insects', label: '昆蟲' },
   { id: 'Reptiles', label: '爬蟲類' },
-  { id: 'Spiders', label: '蜘蛛' }
+  { id: 'Spiders', label: '蜘蛛' },
+  { id: 'Flowers', label: '花' },
+  { id: 'Trees', label: '樹木' }
 ];
 
 export function ExplorePage() {
