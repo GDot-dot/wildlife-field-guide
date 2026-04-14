@@ -1,50 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    // Collection: user_collections
-    // Document ID: {userId}_{animalId}
-    // Fields:
-    //   - userId: string (required) - The ID of the user
-    //   - animalId: string (required) - The ID of the animal
-    //   - animalName: string (optional) - The name of the animal
-    //   - animalImageUrl: string (optional) - The image URL of the animal
-    //   - soundUrl: string (optional) - The sound URL of the animal
-    //   - characteristics: string (optional) - The characteristics
-    //   - diet: string (optional) - The diet
-    //   - habitat: string (optional) - The habitat
-    //   - description: string (optional) - The observation description
-    //   - collectedAt: timestamp (required) - When it was collected
-    //   - notes: string (optional, max 500 chars) - User notes
-    //   - category: string (optional) - The category of the animal
-    //   - lat: number (optional) - The latitude where it was collected
-    //   - lng: number (optional) - The longitude where it was collected
-    // ===============================================================
-
-    // Helper Functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isValidCollectionRecord(data) {
-      // Just check the absolute minimum required fields for now to unblock the user
-      let hasRequired = data.keys().hasAll(['userId', 'animalId', 'collectedAt']);
-      let validUserId = data.userId is string && data.userId.size() > 0;
-      let validAnimalId = data.animalId is string && data.animalId.size() > 0;
-      let validTimestamp = data.collectedAt is timestamp;
-      
-      return hasRequired && validUserId && validAnimalId && validTimestamp;
-    }
-
-    match /user_collections/{recordId} {
-      // Allow users to read, create, update, and delete their own records
-      allow read, write: if request.auth != null && request.auth.uid != null;
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }
