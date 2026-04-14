@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AnimalCard } from '../components/AnimalCard';
+import { SkeletonCard } from '../components/SkeletonCard';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
@@ -30,6 +31,7 @@ export function ExplorePage() {
   const [category, setCategory] = useState('All');
   const [radius, setRadius] = useState(5);
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [locationName, setLocationName] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
@@ -84,6 +86,23 @@ export function ExplorePage() {
       async (position) => {
         const { latitude, longitude } = position.coords;
         setCurrentLocation({ lat: latitude, lng: longitude });
+        setLocationName(null);
+
+        // Reverse geocoding to get location name
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=14&accept-language=zh-TW`);
+          const data = await res.json();
+          if (data && data.address) {
+            const addr = data.address;
+            const city = addr.city || addr.county || '';
+            const district = addr.town || addr.village || addr.suburb || addr.district || '';
+            const name = `${city}${district}` || data.display_name;
+            setLocationName(name);
+          }
+        } catch (e) {
+          console.error("Reverse geocoding failed", e);
+        }
+
         await fetchSpecies(latitude, longitude, 1, category, radius, false);
         setLoadingLocation(false);
       },
@@ -142,10 +161,12 @@ export function ExplorePage() {
         animalImageUrl: animal.imageUrl,
         description: animal.description,
         habitat: animal.habitat,
+        category: animal.category || 'Other',
+        lat: currentLocation?.lat || null,
+        lng: currentLocation?.lng || null,
         collectedAt: serverTimestamp()
       };
       
-      if (animal.soundUrl) dataToSave.soundUrl = animal.soundUrl;
       if (animal.characteristics) dataToSave.characteristics = animal.characteristics;
       if (animal.diet) dataToSave.diet = animal.diet;
 
@@ -179,45 +200,54 @@ export function ExplorePage() {
       </div>
 
       {currentLocation && (
-        <div className="mb-6 flex flex-col sm:flex-row gap-4 sm:items-center justify-between bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="flex items-center text-gray-500 mr-2">
-              <Filter className="w-4 h-4 mr-1" />
-              <span className="text-sm font-medium">分類：</span>
-            </div>
-            {CATEGORIES.map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => handleCategoryChange(cat.id)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  category === cat.id 
-                    ? 'bg-green-100 text-green-800 border border-green-200' 
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
+        <div className="mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col gap-4">
+          <div className="flex items-center text-green-700 bg-green-50 px-3 py-2 rounded-lg w-fit">
+            <MapPin className="w-5 h-5 mr-2" />
+            <span className="text-sm font-bold">
+              {locationName ? `目前位置：${locationName}` : '已取得定位，正在解析地址...'}
+            </span>
           </div>
           
-          <div className="flex flex-wrap gap-2 items-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-3 sm:pt-0 sm:pl-4">
-            <div className="flex items-center text-gray-500 mr-2">
-              <MapPin className="w-4 h-4 mr-1" />
-              <span className="text-sm font-medium">範圍：</span>
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between border-t border-gray-100 pt-4">
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="flex items-center text-gray-500 mr-2">
+                <Filter className="w-4 h-4 mr-1" />
+                <span className="text-sm font-medium">分類：</span>
+              </div>
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => handleCategoryChange(cat.id)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    category === cat.id 
+                      ? 'bg-green-100 text-green-800 border border-green-200' 
+                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
             </div>
-            {[2, 5].map(r => (
-              <button
-                key={r}
-                onClick={() => handleRadiusChange(r)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  radius === r 
-                    ? 'bg-blue-100 text-blue-800 border border-blue-200' 
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {r} 公里
-              </button>
-            ))}
+            
+            <div className="flex flex-wrap gap-2 items-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-3 sm:pt-0 sm:pl-4">
+              <div className="flex items-center text-gray-500 mr-2">
+                <MapPin className="w-4 h-4 mr-1" />
+                <span className="text-sm font-medium">範圍：</span>
+              </div>
+              {[2, 5].map(r => (
+                <button
+                  key={r}
+                  onClick={() => handleRadiusChange(r)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    radius === r 
+                      ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {r} 公里
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -229,7 +259,13 @@ export function ExplorePage() {
         </div>
       )}
 
-      {animals.length === 0 && !loadingLocation && !locationError ? (
+      {loadingLocation ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      ) : animals.length === 0 && !locationError ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm">
           <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <MapPin className="w-8 h-8 text-green-500" />

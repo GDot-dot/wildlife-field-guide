@@ -6,7 +6,9 @@ export interface Animal {
   imageUrl: string;
   habitat: string;
   rarity: 'Common' | 'Uncommon' | 'Rare';
-  soundUrl?: string;
   characteristics?: string;
   diet?: string;
+  category?: string;
+  lat?: number;
+  lng?: number;
 }

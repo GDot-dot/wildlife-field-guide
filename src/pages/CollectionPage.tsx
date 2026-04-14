@@ -5,19 +5,39 @@ import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
 import { Link } from 'react-router-dom';
-import { BookOpen, Leaf } from 'lucide-react';
+import { BookOpen, Leaf, Map as MapIcon, PieChart, List, Award, Search } from 'lucide-react';
 import { Animal } from '../types';
 import { animals as fallbackAnimals } from '../data/animals';
+import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix leaflet default icon issue
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 
 interface CollectedRecord {
   animal: Animal;
   collectedAt: Date;
 }
 
+const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b'];
+
 export function CollectionPage() {
   const { user } = useAuth();
   const [collectedRecords, setCollectedRecords] = useState<CollectedRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'list' | 'stats' | 'map'>('list');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('All');
 
   useEffect(() => {
     if (!user) {
@@ -34,7 +54,6 @@ export function CollectionPage() {
         if (data.collectedAt) {
           let animal: Animal | undefined;
           
-          // Try to construct Animal from Firestore data
           if (data.animalName && data.animalImageUrl) {
              animal = {
                id: data.animalId,
@@ -44,12 +63,13 @@ export function CollectionPage() {
                imageUrl: data.animalImageUrl,
                habitat: data.habitat || '未知',
                rarity: 'Common',
-               soundUrl: data.soundUrl,
                characteristics: data.characteristics,
-               diet: data.diet
+               diet: data.diet,
+               category: data.category || 'Other',
+               lat: data.lat,
+               lng: data.lng
              };
           } else {
-             // Fallback to local data if missing (for older records)
              animal = fallbackAnimals.find(a => a.id === data.animalId);
           }
 
@@ -62,7 +82,6 @@ export function CollectionPage() {
         }
       });
       
-      // Sort by collectedAt descending
       records.sort((a, b) => b.collectedAt.getTime() - a.collectedAt.getTime());
       setCollectedRecords(records);
       setLoading(false);
@@ -84,6 +103,37 @@ export function CollectionPage() {
     );
   }
 
+  // Calculate stats
+  const categoryCounts = collectedRecords.reduce((acc, record) => {
+    const cat = record.animal.category || 'Other';
+    acc[cat] = (acc[cat] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const pieData = Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
+
+  // Badges logic
+  const badges = [];
+  if (collectedRecords.length >= 1) badges.push({ icon: '🌱', name: '生態新手', desc: '收集第1隻生物' });
+  if (collectedRecords.length >= 10) badges.push({ icon: '🌟', name: '生態探索者', desc: '收集10隻生物' });
+  if (collectedRecords.length >= 30) badges.push({ icon: '👑', name: '生態大師', desc: '收集30隻生物' });
+  if ((categoryCounts['Birds'] || 0) >= 5) badges.push({ icon: '🐦', name: '初級賞鳥員', desc: '收集5種鳥類' });
+  if ((categoryCounts['Insects'] || 0) >= 5) badges.push({ icon: '🐛', name: '昆蟲觀察家', desc: '收集5種昆蟲' });
+  if ((categoryCounts['Plants'] || 0) >= 5) badges.push({ icon: '🌿', name: '植物學家', desc: '收集5種植物' });
+
+  // Filter records
+  const filteredRecords = collectedRecords.filter(record => {
+    const matchesSearch = record.animal.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          record.animal.scientificName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = filterCategory === 'All' || record.animal.category === filterCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const categories = ['All', ...Array.from(new Set(collectedRecords.map(r => r.animal.category || 'Other')))];
+
+  // Map center
+  const mapCenter = collectedRecords.find(r => r.animal.lat && r.animal.lng)?.animal;
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8 bg-white p-6 rounded-2xl border border-green-100 shadow-sm">
@@ -99,24 +149,62 @@ export function CollectionPage() {
             <div className="text-sm text-gray-500">總蒐集數</div>
           </div>
         </div>
+
+        {/* Badges Section */}
+        {badges.length > 0 && (
+          <div className="pt-4 border-t border-gray-100">
+            <div className="flex items-center gap-2 mb-3">
+              <Award className="w-5 h-5 text-yellow-500" />
+              <h3 className="font-bold text-gray-800">解鎖徽章</h3>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {badges.map((badge, i) => (
+                <div key={i} className="flex items-center gap-2 bg-yellow-50 border border-yellow-100 px-3 py-1.5 rounded-lg" title={badge.desc}>
+                  <span className="text-xl">{badge.icon}</span>
+                  <span className="text-sm font-medium text-yellow-800">{badge.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        <button
+          onClick={() => setActiveTab('list')}
+          className={`flex items-center px-4 py-2 rounded-xl font-medium transition-colors whitespace-nowrap ${
+            activeTab === 'list' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+          }`}
+        >
+          <List className="w-4 h-4 mr-2" />
+          圖鑑列表
+        </button>
+        <button
+          onClick={() => setActiveTab('stats')}
+          className={`flex items-center px-4 py-2 rounded-xl font-medium transition-colors whitespace-nowrap ${
+            activeTab === 'stats' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+          }`}
+        >
+          <PieChart className="w-4 h-4 mr-2" />
+          生態統計
+        </button>
+        <button
+          onClick={() => setActiveTab('map')}
+          className={`flex items-center px-4 py-2 rounded-xl font-medium transition-colors whitespace-nowrap ${
+            activeTab === 'map' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+          }`}
+        >
+          <MapIcon className="w-4 h-4 mr-2" />
+          足跡地圖
+        </button>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
         </div>
-      ) : collectedRecords.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {collectedRecords.map((record) => (
-            <AnimalCard
-              key={`${record.animal.id}-${record.collectedAt.getTime()}`}
-              animal={record.animal}
-              isCollected={true}
-              collectedAt={record.collectedAt}
-            />
-          ))}
-        </div>
-      ) : (
+      ) : collectedRecords.length === 0 ? (
         <div className="text-center py-16 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
             <Leaf className="w-8 h-8 text-green-400" />
@@ -130,6 +218,116 @@ export function CollectionPage() {
             開始探索
           </Link>
         </div>
+      ) : (
+        <>
+          {activeTab === 'list' && (
+            <>
+              <div className="mb-6 flex flex-col sm:flex-row gap-4">
+                <div className="relative flex-grow">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input 
+                    type="text" 
+                    placeholder="搜尋生物名稱..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setFilterCategory(cat)}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
+                        filterCategory === cat 
+                          ? 'bg-green-100 text-green-800 border border-green-200' 
+                          : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      {cat === 'All' ? '全部' : cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredRecords.map((record) => (
+                  <AnimalCard
+                    key={`${record.animal.id}-${record.collectedAt.getTime()}`}
+                    animal={record.animal}
+                    isCollected={true}
+                    collectedAt={record.collectedAt}
+                  />
+                ))}
+              </div>
+              {filteredRecords.length === 0 && (
+                <div className="text-center py-12 text-gray-500">
+                  找不到符合條件的生物。
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'stats' && (
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+              <h3 className="text-xl font-bold text-gray-900 mb-6 text-center">生態多樣性分佈</h3>
+              <div className="h-[400px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPie>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={150}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'map' && (
+            <div className="bg-white p-2 rounded-2xl border border-gray-100 shadow-sm h-[600px]">
+              {mapCenter ? (
+                <MapContainer 
+                  center={[mapCenter.lat || 23.5, mapCenter.lng || 121]} 
+                  zoom={13} 
+                  style={{ height: '100%', width: '100%', borderRadius: '12px' }}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {collectedRecords.filter(r => r.animal.lat && r.animal.lng).map((record, idx) => (
+                    <Marker key={idx} position={[record.animal.lat!, record.animal.lng!]}>
+                      <Popup>
+                        <div className="text-center">
+                          <img src={record.animal.imageUrl} alt={record.animal.name} className="w-full h-24 object-cover rounded-lg mb-2" />
+                          <strong className="block text-gray-900">{record.animal.name}</strong>
+                          <span className="text-xs text-gray-500">{record.collectedAt.toLocaleDateString()}</span>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MapContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500">
+                  您目前的蒐集紀錄中沒有包含位置資訊。
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

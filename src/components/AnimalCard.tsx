@@ -1,6 +1,6 @@
 import React from 'react';
 import { Animal } from '../types';
-import { CheckCircle2, PlusCircle, Volume2 } from 'lucide-react';
+import { CheckCircle2, PlusCircle } from 'lucide-react';
 import { cn } from './Navbar';
 
 interface AnimalCardProps {
@@ -83,16 +83,6 @@ export function AnimalCard({ animal, isCollected, onCollect, collectedAt }: Anim
             {animal.habitat}
           </p>
         </div>
-
-        {animal.soundUrl && (
-          <div className="mb-4 bg-gray-50 p-2 rounded-xl border border-gray-100">
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <Volume2 className="w-4 h-4 text-gray-500" />
-              <span className="text-xs font-medium text-gray-600">動物叫聲</span>
-            </div>
-            <audio controls src={animal.soundUrl} className="w-full h-8 outline-none" />
-          </div>
-        )}
         
         <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-50">
           {!isCollected && onCollect && (
