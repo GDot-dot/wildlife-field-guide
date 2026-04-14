@@ -75,7 +75,7 @@ export function CollectionPage() {
                description: data.description || '這是一筆您已蒐集的生物紀錄。',
                imageUrl: data.animalImageUrl,
                habitat: data.habitat || '未知',
-               rarity: 'Common',
+               rarity: data.rarity || 'Common',
                characteristics: data.characteristics,
                diet: data.diet,
                category: data.category || 'Other',

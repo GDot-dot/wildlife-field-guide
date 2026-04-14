@@ -14,16 +14,20 @@ interface AnimalCardProps {
 export function AnimalCard({ animal, isCollected, onCollect, onUncollect, collectedAt }: AnimalCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const rarityColors = {
+  const rarityColors: Record<string, string> = {
     Common: 'bg-gray-100 text-gray-700 border-gray-200',
     Uncommon: 'bg-blue-50 text-blue-700 border-blue-200',
     Rare: 'bg-purple-50 text-purple-700 border-purple-200',
+    Epic: 'bg-pink-50 text-pink-700 border-pink-200',
+    Legendary: 'bg-yellow-50 text-yellow-700 border-yellow-200 shadow-sm',
   };
 
-  const rarityLabels = {
+  const rarityLabels: Record<string, string> = {
     Common: '常見',
     Uncommon: '少見',
     Rare: '稀有',
+    Epic: '史詩',
+    Legendary: '傳說',
   };
 
   return (

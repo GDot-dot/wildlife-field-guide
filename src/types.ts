@@ -5,7 +5,7 @@ export interface Animal {
   description: string;
   imageUrl: string;
   habitat: string;
-  rarity: 'Common' | 'Uncommon' | 'Rare';
+  rarity: 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary';
   characteristics?: string;
   diet?: string;
   category?: string;

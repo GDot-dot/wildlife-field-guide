@@ -7,7 +7,7 @@ import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } fr
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
 import { getNearbySpecies } from '../services/inaturalist';
 import { Animal } from '../types';
-import { MapPin, Loader2, AlertCircle, Filter } from 'lucide-react';
+import { MapPin, Loader2, AlertCircle, Filter, Plus, X, EyeOff, Upload } from 'lucide-react';
 
 const CATEGORIES = [
   { id: 'All', label: '全部' },
@@ -33,6 +33,22 @@ export function ExplorePage() {
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
   const [locationName, setLocationName] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
+  
+  // Filters
+  const [showUncollectedOnly, setShowUncollectedOnly] = useState(false);
+  const [rarityFilter, setRarityFilter] = useState<string>('All');
+
+  // Custom Discovery Modal
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [customAnimal, setCustomAnimal] = useState<Partial<Animal>>({
+    name: '',
+    scientificName: '',
+    description: '',
+    imageUrl: '',
+    habitat: '',
+    category: 'Other',
+    rarity: 'Common'
+  });
 
   useEffect(() => {
     if (!user) {
@@ -176,6 +192,90 @@ export function ExplorePage() {
     }
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const MAX_SIZE = 800;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          setCustomAnimal({ ...customAnimal, imageUrl: compressedBase64 });
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveCustom = async () => {
+    if (!user) {
+      alert('請先登入才能新增自訂發現喔！');
+      return;
+    }
+    if (!customAnimal.name || !customAnimal.imageUrl) {
+      alert('請填寫生物名稱與圖片網址！');
+      return;
+    }
+
+    try {
+      const customId = `custom_${Date.now()}`;
+      const recordId = `${user.uid}_${customId}`;
+      const dataToSave: any = {
+        userId: user.uid,
+        animalId: customId,
+        animalName: customAnimal.name,
+        animalScientificName: customAnimal.scientificName || '',
+        animalImageUrl: customAnimal.imageUrl,
+        description: customAnimal.description || '',
+        habitat: customAnimal.habitat || '',
+        category: customAnimal.category || 'Other',
+        rarity: customAnimal.rarity || 'Common',
+        lat: currentLocation?.lat ?? null,
+        lng: currentLocation?.lng ?? null,
+        collectedAt: serverTimestamp()
+      };
+
+      await setDoc(doc(db, 'user_collections', recordId), dataToSave);
+      setIsCustomModalOpen(false);
+      setCustomAnimal({
+        name: '', scientificName: '', description: '', imageUrl: '', habitat: '', category: 'Other', rarity: 'Common'
+      });
+      alert('成功新增自訂發現！');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `user_collections/custom`);
+    }
+  };
+
+  const filteredAnimals = animals.filter(animal => {
+    if (showUncollectedOnly && collectedIds.has(animal.id)) return false;
+    if (rarityFilter !== 'All' && animal.rarity !== rarityFilter) return false;
+    return true;
+  });
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -185,18 +285,27 @@ export function ExplorePage() {
             讀取您的 GPS 定位，尋找附近出沒的鳥類、昆蟲與爬蟲類。
           </p>
         </div>
-        <button
-          onClick={handleGetLocation}
-          disabled={loadingLocation}
-          className="inline-flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          {loadingLocation ? (
-            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-          ) : (
-            <MapPin className="w-5 h-5 mr-2" />
-          )}
-          {loadingLocation ? '正在尋找...' : '尋找附近生物'}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setIsCustomModalOpen(true)}
+            className="inline-flex items-center justify-center px-4 py-2 bg-white border border-green-600 text-green-600 rounded-xl hover:bg-green-50 transition-colors font-medium"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            自訂發現
+          </button>
+          <button
+            onClick={handleGetLocation}
+            disabled={loadingLocation}
+            className="inline-flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {loadingLocation ? (
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            ) : (
+              <MapPin className="w-5 h-5 mr-2" />
+            )}
+            {loadingLocation ? '正在尋找...' : '尋找附近生物'}
+          </button>
+        </div>
       </div>
 
       {currentLocation && (
@@ -208,45 +317,83 @@ export function ExplorePage() {
             </span>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between border-t border-gray-100 pt-4">
-            <div className="flex flex-wrap gap-2 items-center">
-              <div className="flex items-center text-gray-500 mr-2">
-                <Filter className="w-4 h-4 mr-1" />
-                <span className="text-sm font-medium">分類：</span>
+          <div className="flex flex-col gap-4 border-t border-gray-100 pt-4">
+            <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
+              <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex items-center text-gray-500 mr-2">
+                  <Filter className="w-4 h-4 mr-1" />
+                  <span className="text-sm font-medium">分類：</span>
+                </div>
+                {CATEGORIES.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleCategoryChange(cat.id)}
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      category === cat.id 
+                        ? 'bg-green-100 text-green-800 border border-green-200' 
+                        : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
               </div>
-              {CATEGORIES.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => handleCategoryChange(cat.id)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    category === cat.id 
-                      ? 'bg-green-100 text-green-800 border border-green-200' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
+              
+              <div className="flex flex-wrap gap-2 items-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-3 sm:pt-0 sm:pl-4">
+                <div className="flex items-center text-gray-500 mr-2">
+                  <MapPin className="w-4 h-4 mr-1" />
+                  <span className="text-sm font-medium">範圍：</span>
+                </div>
+                {[2, 5].map(r => (
+                  <button
+                    key={r}
+                    onClick={() => handleRadiusChange(r)}
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      radius === r 
+                        ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                        : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    {r} 公里
+                  </button>
+                ))}
+              </div>
             </div>
-            
-            <div className="flex flex-wrap gap-2 items-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-3 sm:pt-0 sm:pl-4">
-              <div className="flex items-center text-gray-500 mr-2">
-                <MapPin className="w-4 h-4 mr-1" />
-                <span className="text-sm font-medium">範圍：</span>
+
+            {/* 進階篩選 */}
+            <div className="flex flex-wrap gap-4 items-center border-t border-gray-100 pt-4">
+              <button
+                onClick={() => setShowUncollectedOnly(!showUncollectedOnly)}
+                className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  showUncollectedOnly 
+                    ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' 
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <EyeOff className="w-4 h-4 mr-1.5" />
+                只顯示未蒐集
+              </button>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-500">稀有度：</span>
+                {['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'].map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setRarityFilter(r)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      rarityFilter === r 
+                        ? 'bg-gray-800 text-white' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {r === 'All' ? '全部' : 
+                     r === 'Common' ? '常見' : 
+                     r === 'Uncommon' ? '少見' : 
+                     r === 'Rare' ? '稀有' : 
+                     r === 'Epic' ? '史詩' : '傳說'}
+                  </button>
+                ))}
               </div>
-              {[2, 5].map(r => (
-                <button
-                  key={r}
-                  onClick={() => handleRadiusChange(r)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    radius === r 
-                      ? 'bg-blue-100 text-blue-800 border border-blue-200' 
-                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {r} 公里
-                </button>
-              ))}
             </div>
           </div>
         </div>
@@ -276,7 +423,7 @@ export function ExplorePage() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {animals.map((animal, index) => (
+            {filteredAnimals.map((animal, index) => (
               <AnimalCard
                 key={`${animal.id}-${index}`}
                 animal={animal}
@@ -285,6 +432,12 @@ export function ExplorePage() {
               />
             ))}
           </div>
+          
+          {filteredAnimals.length === 0 && animals.length > 0 && (
+            <div className="text-center py-12 text-gray-500">
+              沒有符合篩選條件的生物。
+            </div>
+          )}
           
           {animals.length > 0 && hasMore && (
             <div className="mt-8 flex justify-center">
@@ -311,6 +464,135 @@ export function ExplorePage() {
             </div>
           )}
         </>
+      )}
+      {/* Custom Discovery Modal */}
+      {isCustomModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-900">新增自訂發現</h3>
+              <button onClick={() => setIsCustomModalOpen(false)} className="p-1 hover:bg-gray-200 rounded-full transition-colors">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">生物名稱 <span className="text-red-500">*</span></label>
+                <input 
+                  type="text" 
+                  value={customAnimal.name} 
+                  onChange={e => setCustomAnimal({...customAnimal, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                  placeholder="例如：台灣藍鵲"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">圖片 <span className="text-red-500">*</span></label>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <label className="flex-shrink-0 cursor-pointer inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                      <Upload className="w-4 h-4 mr-2" />
+                      上傳照片
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={handleImageUpload}
+                      />
+                    </label>
+                    <span className="text-sm text-gray-500">或</span>
+                    <input 
+                      type="text" 
+                      value={customAnimal.imageUrl} 
+                      onChange={e => setCustomAnimal({...customAnimal, imageUrl: e.target.value})}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-sm"
+                      placeholder="貼上圖片網址 (URL)"
+                    />
+                  </div>
+                  {customAnimal.imageUrl && (
+                    <div className="h-40 w-full rounded-lg overflow-hidden border border-gray-200 bg-gray-50 relative group">
+                      <img src={customAnimal.imageUrl} alt="預覽" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                      <button 
+                        onClick={() => setCustomAnimal({...customAnimal, imageUrl: ''})}
+                        className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">分類</label>
+                  <select 
+                    value={customAnimal.category}
+                    onChange={e => setCustomAnimal({...customAnimal, category: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                  >
+                    {CATEGORIES.filter(c => c.id !== 'All').map(c => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                    <option value="Other">其他</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">稀有度</label>
+                  <select 
+                    value={customAnimal.rarity}
+                    onChange={e => setCustomAnimal({...customAnimal, rarity: e.target.value as any})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                  >
+                    <option value="Common">常見</option>
+                    <option value="Uncommon">少見</option>
+                    <option value="Rare">稀有</option>
+                    <option value="Epic">史詩</option>
+                    <option value="Legendary">傳說</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">學名 (選填)</label>
+                <input 
+                  type="text" 
+                  value={customAnimal.scientificName} 
+                  onChange={e => setCustomAnimal({...customAnimal, scientificName: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                  placeholder="例如：Urocissa caerulea"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">觀察筆記 / 描述</label>
+                <textarea 
+                  value={customAnimal.description} 
+                  onChange={e => setCustomAnimal({...customAnimal, description: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none resize-none h-24"
+                  placeholder="記錄一下你在哪裡、什麼情況下發現它的..."
+                />
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+              <button 
+                onClick={() => setIsCustomModalOpen(false)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={handleSaveCustom}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+              >
+                儲存發現
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
