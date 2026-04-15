@@ -19,24 +19,53 @@ const CATEGORIES = [
   { id: 'Trees', label: '樹木' }
 ];
 
+const EXPLORE_STATE_KEY = 'explore_page_state';
+
+const loadSavedState = () => {
+  try {
+    const saved = sessionStorage.getItem(EXPLORE_STATE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error('Failed to load explore state', e);
+  }
+  return null;
+};
+
 export function ExplorePage() {
   const { user } = useAuth();
+  const savedState = loadSavedState();
+
   const [collectedIds, setCollectedIds] = useState<Set<string>>(new Set());
-  const [animals, setAnimals] = useState<Animal[]>([]);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   
-  const [page, setPage] = useState(1);
-  const [category, setCategory] = useState('All');
-  const [radius, setRadius] = useState(5);
-  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
-  const [locationName, setLocationName] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  
-  // Filters
-  const [showUncollectedOnly, setShowUncollectedOnly] = useState(false);
-  const [rarityFilter, setRarityFilter] = useState<string>('All');
+  // Persisted States
+  const [animals, setAnimals] = useState<Animal[]>(savedState?.animals || []);
+  const [page, setPage] = useState(savedState?.page || 1);
+  const [category, setCategory] = useState(savedState?.category || 'All');
+  const [radius, setRadius] = useState(savedState?.radius || 5);
+  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(savedState?.currentLocation || null);
+  const [locationName, setLocationName] = useState<string | null>(savedState?.locationName || null);
+  const [hasMore, setHasMore] = useState(savedState?.hasMore ?? true);
+  const [showUncollectedOnly, setShowUncollectedOnly] = useState(savedState?.showUncollectedOnly || false);
+  const [rarityFilter, setRarityFilter] = useState<string>(savedState?.rarityFilter || 'All');
+
+  // Save state whenever it changes
+  useEffect(() => {
+    const stateToSave = {
+      animals,
+      page,
+      category,
+      radius,
+      currentLocation,
+      locationName,
+      hasMore,
+      showUncollectedOnly,
+      rarityFilter
+    };
+    sessionStorage.setItem(EXPLORE_STATE_KEY, JSON.stringify(stateToSave));
+  }, [animals, page, category, radius, currentLocation, locationName, hasMore, showUncollectedOnly, rarityFilter]);
 
   // Custom Discovery Modal
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);

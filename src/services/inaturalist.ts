@@ -101,7 +101,20 @@ export async function getNearbySpecies(lat: number, lng: number, page: number = 
       const cached = localStorage.getItem(CACHE_PREFIX + animal.scientificName);
       if (cached) {
         try {
-          cachedData[animal.scientificName] = JSON.parse(cached);
+          const parsed = JSON.parse(cached);
+          const actualData = parsed.data || parsed;
+          const timestamp = parsed.timestamp || 0;
+          
+          // 快取過期時間：30天 (30 * 24 * 60 * 60 * 1000 毫秒)
+          const isExpired = (Date.now() - timestamp) > 2592000000;
+          // 如果之前 AI 找不到資料 (暫無資料)，也視為無效快取，重新詢問
+          const isNoData = actualData.characteristics === '暫無資料' || actualData.characteristics === '';
+
+          if (isExpired || isNoData) {
+            uncachedAnimals.push(animal);
+          } else {
+            cachedData[animal.scientificName] = actualData;
+          }
         } catch (e) {
           uncachedAnimals.push(animal);
         }
@@ -133,8 +146,11 @@ export async function getNearbySpecies(lat: number, lng: number, page: number = 
         diet: enriched.diet || '暫無資料',
       };
 
-      // 存入快取
-      localStorage.setItem(CACHE_PREFIX + animal.scientificName, JSON.stringify(additionalData));
+      // 存入快取 (加入時間戳記)
+      localStorage.setItem(CACHE_PREFIX + animal.scientificName, JSON.stringify({
+        data: additionalData,
+        timestamp: Date.now()
+      }));
 
       return {
         ...animal,
