@@ -337,96 +337,97 @@ export function ExplorePage() {
         </div>
       </div>
 
-      {currentLocation && (
-        <div className="mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col gap-4">
+      {/* 篩選器面板 - 始終顯示 */}
+      <div className="mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col gap-4">
+        {currentLocation && (
           <div className="flex items-center text-green-700 bg-green-50 px-3 py-2 rounded-lg w-fit">
             <MapPin className="w-5 h-5 mr-2" />
             <span className="text-sm font-bold">
               {locationName ? `目前位置：${locationName}` : '已取得定位，正在解析地址...'}
             </span>
           </div>
-          
-          <div className="flex flex-col gap-4 border-t border-gray-100 pt-4">
-            <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
-              <div className="flex flex-wrap gap-2 items-center">
-                <div className="flex items-center text-gray-500 mr-2">
-                  <Filter className="w-4 h-4 mr-1" />
-                  <span className="text-sm font-medium">分類：</span>
-                </div>
-                {CATEGORIES.map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => handleCategoryChange(cat.id)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                      category === cat.id 
-                        ? 'bg-green-100 text-green-800 border border-green-200' 
-                        : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
+        )}
+        
+        <div className={`flex flex-col gap-4 ${currentLocation ? 'border-t border-gray-100 pt-4' : ''}`}>
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="flex items-center text-gray-500 mr-2">
+                <Filter className="w-4 h-4 mr-1" />
+                <span className="text-sm font-medium">分類：</span>
               </div>
-              
-              <div className="flex flex-wrap gap-2 items-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-3 sm:pt-0 sm:pl-4">
-                <div className="flex items-center text-gray-500 mr-2">
-                  <MapPin className="w-4 h-4 mr-1" />
-                  <span className="text-sm font-medium">範圍：</span>
-                </div>
-                {[2, 5].map(r => (
-                  <button
-                    key={r}
-                    onClick={() => handleRadiusChange(r)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                      radius === r 
-                        ? 'bg-blue-100 text-blue-800 border border-blue-200' 
-                        : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    {r} 公里
-                  </button>
-                ))}
-              </div>
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => handleCategoryChange(cat.id)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    category === cat.id 
+                      ? 'bg-green-100 text-green-800 border border-green-200' 
+                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
             </div>
-
-            {/* 進階篩選 */}
-            <div className="flex flex-wrap gap-4 items-center border-t border-gray-100 pt-4">
-              <button
-                onClick={() => setShowUncollectedOnly(!showUncollectedOnly)}
-                className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  showUncollectedOnly 
-                    ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' 
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <EyeOff className="w-4 h-4 mr-1.5" />
-                只顯示未蒐集
-              </button>
-
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-500">稀有度：</span>
-                {['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'].map(r => (
-                  <button
-                    key={r}
-                    onClick={() => setRarityFilter(r)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      rarityFilter === r 
-                        ? 'bg-gray-800 text-white' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {r === 'All' ? '全部' : 
-                     r === 'Common' ? '常見' : 
-                     r === 'Uncommon' ? '少見' : 
-                     r === 'Rare' ? '稀有' : 
-                     r === 'Epic' ? '史詩' : '傳說'}
-                  </button>
-                ))}
+            
+            <div className="flex flex-wrap gap-2 items-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-3 sm:pt-0 sm:pl-4">
+              <div className="flex items-center text-gray-500 mr-2">
+                <MapPin className="w-4 h-4 mr-1" />
+                <span className="text-sm font-medium">範圍：</span>
               </div>
+              {[2, 5].map(r => (
+                <button
+                  key={r}
+                  onClick={() => handleRadiusChange(r)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    radius === r 
+                      ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {r} 公里
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 進階篩選 */}
+          <div className="flex flex-wrap gap-4 items-center border-t border-gray-100 pt-4">
+            <button
+              onClick={() => setShowUncollectedOnly(!showUncollectedOnly)}
+              className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                showUncollectedOnly 
+                  ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' 
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <EyeOff className="w-4 h-4 mr-1.5" />
+              只顯示未蒐集
+            </button>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-500">稀有度：</span>
+              {['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'].map(r => (
+                <button
+                  key={r}
+                  onClick={() => setRarityFilter(r)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    rarityFilter === r 
+                      ? 'bg-gray-800 text-white' 
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {r === 'All' ? '全部' : 
+                   r === 'Common' ? '常見' : 
+                   r === 'Uncommon' ? '少見' : 
+                   r === 'Rare' ? '稀有' : 
+                   r === 'Epic' ? '史詩' : '傳說'}
+                </button>
+              ))}
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       {locationError && (
         <div className="mb-8 p-4 bg-red-50 text-red-700 rounded-xl flex items-center gap-3 border border-red-100">
