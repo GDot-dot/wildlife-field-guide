@@ -605,7 +605,7 @@ export function ExplorePage() {
                         className="w-full flex items-center justify-center px-4 py-2 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium disabled:opacity-50"
                       >
                         {isRecognizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                        {isRecognizing ? 'AI 正在努力辨識中...' : '✨ 使用 AI 自動辨識圖片'}
+                        {isRecognizing ? 'AI 正在努力辨識中...' : '使用 AI 自動辨識圖片'}
                       </button>
                     </div>
                   )}
