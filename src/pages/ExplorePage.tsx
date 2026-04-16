@@ -5,9 +5,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
-import { getNearbySpecies } from '../services/inaturalist';
+import { getNearbySpecies, recognizeImageWithAI } from '../services/inaturalist';
 import { Animal } from '../types';
-import { MapPin, Loader2, AlertCircle, Filter, Plus, X, EyeOff, Upload } from 'lucide-react';
+import { MapPin, Loader2, AlertCircle, Filter, Plus, X, EyeOff, Upload, Search, Sparkles } from 'lucide-react';
 
 const CATEGORIES = [
   { id: 'All', label: '全部' },
@@ -50,6 +50,7 @@ export function ExplorePage() {
   const [hasMore, setHasMore] = useState(savedState?.hasMore ?? true);
   const [showUncollectedOnly, setShowUncollectedOnly] = useState(savedState?.showUncollectedOnly || false);
   const [rarityFilter, setRarityFilter] = useState<string>(savedState?.rarityFilter || 'All');
+  const [searchTerm, setSearchTerm] = useState<string>(savedState?.searchTerm || '');
 
   // Save state whenever it changes
   useEffect(() => {
@@ -62,13 +63,15 @@ export function ExplorePage() {
       locationName,
       hasMore,
       showUncollectedOnly,
-      rarityFilter
+      rarityFilter,
+      searchTerm
     };
     sessionStorage.setItem(EXPLORE_STATE_KEY, JSON.stringify(stateToSave));
-  }, [animals, page, category, radius, currentLocation, locationName, hasMore, showUncollectedOnly, rarityFilter]);
+  }, [animals, page, category, radius, currentLocation, locationName, hasMore, showUncollectedOnly, rarityFilter, searchTerm]);
 
   // Custom Discovery Modal
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [isRecognizing, setIsRecognizing] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<Partial<Animal>>({
     name: '',
     scientificName: '',
@@ -260,6 +263,32 @@ export function ExplorePage() {
     reader.readAsDataURL(file);
   };
 
+  const handleAIRecognize = async () => {
+    if (!customAnimal.imageUrl) return;
+    setIsRecognizing(true);
+    try {
+      const result = await recognizeImageWithAI(customAnimal.imageUrl);
+      if (result?.error) {
+        alert(result.error);
+      } else if (result) {
+        setCustomAnimal(prev => ({
+          ...prev,
+          name: result.name || prev.name,
+          scientificName: result.scientificName || prev.scientificName,
+          category: result.category || prev.category,
+          rarity: result.rarity || prev.rarity,
+          description: result.description || prev.description,
+          habitat: result.habitat || prev.habitat,
+        }));
+        alert('AI 辨識成功！已為您自動填入資料。');
+      }
+    } catch (error) {
+      alert('AI 辨識暫時無法使用，請手動輸入資料喔！');
+    } finally {
+      setIsRecognizing(false);
+    }
+  };
+
   const handleSaveCustom = async () => {
     if (!user) {
       alert('請先登入才能新增自訂發現喔！');
@@ -302,6 +331,12 @@ export function ExplorePage() {
   const filteredAnimals = animals.filter(animal => {
     if (showUncollectedOnly && collectedIds.has(animal.id)) return false;
     if (rarityFilter !== 'All' && animal.rarity !== rarityFilter) return false;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const matchName = animal.name?.toLowerCase().includes(term);
+      const matchSci = animal.scientificName?.toLowerCase().includes(term);
+      if (!matchName && !matchSci) return false;
+    }
     return true;
   });
 
@@ -393,6 +428,17 @@ export function ExplorePage() {
 
           {/* 進階篩選 */}
           <div className="flex flex-wrap gap-4 items-center border-t border-gray-100 pt-4">
+            <div className="relative flex-grow sm:flex-grow-0 sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input 
+                type="text" 
+                placeholder="搜尋名稱或學名..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-1.5 border border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+
             <button
               onClick={() => setShowUncollectedOnly(!showUncollectedOnly)}
               className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
@@ -542,13 +588,24 @@ export function ExplorePage() {
                     />
                   </div>
                   {customAnimal.imageUrl && (
-                    <div className="h-40 w-full rounded-lg overflow-hidden border border-gray-200 bg-gray-50 relative group">
-                      <img src={customAnimal.imageUrl} alt="預覽" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
-                      <button 
-                        onClick={() => setCustomAnimal({...customAnimal, imageUrl: ''})}
-                        className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                    <div className="flex flex-col gap-2">
+                      <div className="h-40 w-full rounded-lg overflow-hidden border border-gray-200 bg-gray-50 relative group">
+                        <img src={customAnimal.imageUrl} alt="預覽" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                        <button 
+                          onClick={() => setCustomAnimal({...customAnimal, imageUrl: ''})}
+                          className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAIRecognize}
+                        disabled={isRecognizing}
+                        className="w-full flex items-center justify-center px-4 py-2 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium disabled:opacity-50"
                       >
-                        <X className="w-4 h-4" />
+                        {isRecognizing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                        {isRecognizing ? 'AI 正在努力辨識中...' : '✨ 使用 AI 自動辨識圖片'}
                       </button>
                     </div>
                   )}

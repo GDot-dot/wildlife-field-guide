@@ -3,6 +3,59 @@ import { GoogleGenAI } from '@google/genai';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+export async function recognizeImageWithAI(base64Image: string) {
+  const match = base64Image.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+  let mimeType = 'image/jpeg';
+  let base64Data = base64Image;
+
+  if (match) {
+    mimeType = match[1];
+    base64Data = match[2];
+  }
+
+  const prompt = `
+  請辨識這張圖片中的生物（動物或植物）。
+  請回傳 JSON 格式，包含以下欄位：
+  - name: 生物的中文俗名
+  - scientificName: 學名
+  - category: 分類，必須是以下之一：Birds, Insects, Reptiles, Spiders, Flowers, Trees, Other
+  - rarity: 稀有度，必須是以下之一：Common, Uncommon, Rare, Epic, Legendary (請根據該物種在台灣的常見程度推測)
+  - description: 關於這個生物的特色描述與觀察筆記 (約50字)
+  - habitat: 棲息地描述
+
+  如果圖片中沒有生物，或者無法辨識，請回傳 { "error": "無法辨識圖片中的生物" }。
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+          { text: prompt },
+          {
+            inlineData: {
+              data: base64Data,
+              mimeType: mimeType
+            }
+          }
+        ]
+      },
+      config: {
+        responseMimeType: 'application/json',
+      }
+    });
+
+    const text = response.text;
+    if (text) {
+      return JSON.parse(text);
+    }
+  } catch (e) {
+    console.error("AI recognition failed", e);
+    throw new Error("AI 辨識失敗或額度已滿");
+  }
+  return null;
+}
+
 async function enrichAnimalDataWithAI(animals: Partial<Animal>[]) {
   if (animals.length === 0) return {};
 
