@@ -3,14 +3,37 @@ import { GoogleGenAI } from '@google/genai';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-export async function recognizeImageWithAI(base64Image: string) {
-  const match = base64Image.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+export async function recognizeImageWithAI(imageUrlOrBase64: string) {
   let mimeType = 'image/jpeg';
-  let base64Data = base64Image;
+  let base64Data = imageUrlOrBase64;
 
-  if (match) {
-    mimeType = match[1];
-    base64Data = match[2];
+  if (imageUrlOrBase64.startsWith('data:')) {
+    const parts = imageUrlOrBase64.split(',');
+    if (parts.length === 2) {
+      const match = parts[0].match(/data:(image\/[^;]+);base64/);
+      if (match) {
+        mimeType = match[1];
+      }
+      base64Data = parts[1];
+    }
+  } else if (imageUrlOrBase64.startsWith('http')) {
+    try {
+      const response = await fetch(imageUrlOrBase64);
+      const blob = await response.blob();
+      mimeType = blob.type;
+      base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          resolve(dataUrl.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.error("Failed to fetch image URL", e);
+      throw new Error("無法讀取圖片網址，這可能是因為跨域限制 (CORS)。請嘗試直接「上傳照片」來進行 AI 辨識。");
+    }
   }
 
   const prompt = `
