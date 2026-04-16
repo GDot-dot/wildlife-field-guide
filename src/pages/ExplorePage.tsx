@@ -428,20 +428,9 @@ export function ExplorePage() {
 
           {/* 進階篩選 */}
           <div className="flex flex-wrap gap-4 items-center border-t border-gray-100 pt-4">
-            <div className="relative flex-grow sm:flex-grow-0 sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input 
-                type="text" 
-                placeholder="搜尋名稱或學名..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-1.5 border border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-
             <button
               onClick={() => setShowUncollectedOnly(!showUncollectedOnly)}
-              className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
                 showUncollectedOnly 
                   ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' 
                   : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
@@ -451,7 +440,7 @@ export function ExplorePage() {
               只顯示未蒐集
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-medium text-gray-500">稀有度：</span>
               {['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'].map(r => (
                 <button
@@ -470,6 +459,17 @@ export function ExplorePage() {
                    r === 'Epic' ? '史詩' : '傳說'}
                 </button>
               ))}
+            </div>
+
+            <div className="relative flex-grow min-w-[200px] ml-auto">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input 
+                type="text" 
+                placeholder="搜尋名稱或學名..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-1.5 border border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
             </div>
           </div>
         </div>
