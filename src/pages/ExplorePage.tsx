@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
-import { geocodePlaceName, getBrowserLocation } from '../lib/locationUtils';
+import { geocodePlaceName, getBrowserLocation, parseCoordinatesFromText } from '../lib/locationUtils';
 import { getNearbySpecies, recognizeImageWithAI, refineSpeciesByNameWithAI } from '../services/inaturalist';
 import { Animal } from '../types';
 import { MapPin, Loader2, AlertCircle, Filter, Plus, X, EyeOff, Upload, Search, Sparkles } from 'lucide-react';
@@ -130,6 +130,7 @@ export function ExplorePage() {
   const [customObservation, setCustomObservation] = useState({
     observedAt: getDateTimeInputValue(),
     locationName: '',
+    mapText: '',
     lat: '',
     lng: '',
     weather: ''
@@ -438,6 +439,7 @@ export function ExplorePage() {
       setCustomObservation({
         observedAt: getDateTimeInputValue(),
         locationName: '',
+        mapText: '',
         lat: '',
         lng: '',
         weather: ''
@@ -472,6 +474,21 @@ export function ExplorePage() {
     } finally {
       setIsResolvingCustomPlace(false);
     }
+  };
+
+  const handleParseCustomMapText = () => {
+    const coordinates = parseCoordinatesFromText(customObservation.mapText);
+    if (!coordinates) {
+      alert('找不到座標。可貼上 Google Maps 分享連結，或像 25.033, 121.565 這樣的座標。');
+      return;
+    }
+
+    setCustomObservation(prev => ({
+      ...prev,
+      locationName: prev.locationName || coordinates.name,
+      lat: String(coordinates.lat),
+      lng: String(coordinates.lng),
+    }));
   };
 
   const handleUseCurrentLocationForCustom = async () => {
@@ -905,6 +922,26 @@ export function ExplorePage() {
                       {isResolvingCustomPlace ? '查找中...' : '查找座標'}
                     </button>
                   </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Google Maps 連結或座標</label>
+                  <div className="flex gap-2">
+                    <input
+                      value={customObservation.mapText}
+                      onChange={e => setCustomObservation({...customObservation, mapText: e.target.value})}
+                      className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                      placeholder="貼上分享連結，或 25.033, 121.565"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleParseCustomMapText}
+                      disabled={!customObservation.mapText.trim()}
+                      className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      讀取
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">手機 Google Maps 可用「分享」複製連結；短網址請先打開後複製展開網址，或直接貼座標。</p>
                 </div>
                 <details className="rounded-lg border border-gray-200 bg-white p-3">
                   <summary className="cursor-pointer text-sm font-medium text-gray-700">進階座標</summary>

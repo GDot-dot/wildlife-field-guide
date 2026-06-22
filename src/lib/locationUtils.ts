@@ -4,9 +4,37 @@ export interface ResolvedPlace {
   lng: number;
 }
 
+export function parseCoordinatesFromText(text: string): ResolvedPlace | null {
+  const input = text.trim();
+  if (!input) return null;
+
+  const patterns = [
+    /@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/,
+    /[?&]q=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/,
+    /[?&]ll=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/,
+    /(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = input.match(pattern);
+    if (!match) continue;
+
+    const lat = Number(match[1]);
+    const lng = Number(match[2]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      return { name: '地圖座標', lat, lng };
+    }
+  }
+
+  return null;
+}
+
 export async function geocodePlaceName(placeName: string): Promise<ResolvedPlace | null> {
   const query = placeName.trim();
   if (!query) return null;
+
+  const coordinates = parseCoordinatesFromText(query);
+  if (coordinates) return coordinates;
 
   const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&accept-language=zh-TW`;
   const response = await fetch(url);

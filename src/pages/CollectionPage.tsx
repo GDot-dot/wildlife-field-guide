@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
-import { geocodePlaceName, getBrowserLocation } from '../lib/locationUtils';
+import { geocodePlaceName, getBrowserLocation, parseCoordinatesFromText } from '../lib/locationUtils';
 import { Link } from 'react-router-dom';
 import { BookOpen, Leaf, Map as MapIcon, PieChart, List, Award, Search, ChevronDown, ChevronUp, CalendarDays, Edit3, X, Upload, Clock, MapPin, CloudSun, CheckCircle2 } from 'lucide-react';
 import { Animal } from '../types';
@@ -132,7 +132,7 @@ export function CollectionPage() {
   const [filterCategory, setFilterCategory] = useState('All');
   const [isBadgesExpanded, setIsBadgesExpanded] = useState(false);
   const [editingRecord, setEditingRecord] = useState<CollectedRecord | null>(null);
-  const [editForm, setEditForm] = useState({ observedAt: '', weather: '', locationName: '', lat: '', lng: '', notes: '', photoUrl: '' });
+  const [editForm, setEditForm] = useState({ observedAt: '', weather: '', locationName: '', mapText: '', lat: '', lng: '', notes: '', photoUrl: '' });
   const [isResolvingEditPlace, setIsResolvingEditPlace] = useState(false);
 
   useEffect(() => {
@@ -202,6 +202,7 @@ export function CollectionPage() {
       observedAt: toDateTimeInputValue(record.observedAt),
       weather: record.weather,
       locationName: record.locationName,
+      mapText: '',
       lat: record.animal.lat === undefined || record.animal.lat === null ? '' : String(record.animal.lat),
       lng: record.animal.lng === undefined || record.animal.lng === null ? '' : String(record.animal.lng),
       notes: record.notes || (record.animal.characteristics !== '暫無資料' ? record.animal.characteristics || '' : ''),
@@ -263,6 +264,21 @@ export function CollectionPage() {
     } finally {
       setIsResolvingEditPlace(false);
     }
+  };
+
+  const handleParseEditMapText = () => {
+    const coordinates = parseCoordinatesFromText(editForm.mapText);
+    if (!coordinates) {
+      alert('找不到座標。可貼上 Google Maps 分享連結，或像 25.033, 121.565 這樣的座標。');
+      return;
+    }
+
+    setEditForm(prev => ({
+      ...prev,
+      locationName: prev.locationName || coordinates.name,
+      lat: String(coordinates.lat),
+      lng: String(coordinates.lng),
+    }));
   };
 
   const handleUseCurrentLocationForEdit = async () => {
@@ -666,6 +682,17 @@ export function CollectionPage() {
                   <span className="text-xs text-gray-500">已設定座標：{Number(editForm.lat).toFixed(5)}, {Number(editForm.lng).toFixed(5)}</span>
                 )}
               </div>
+
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">Google Maps 連結或座標</span>
+                <div className="mt-1 flex gap-2">
+                  <input value={editForm.mapText} onChange={e => setEditForm({ ...editForm, mapText: e.target.value })} placeholder="貼上分享連結，或 25.033, 121.565" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <button type="button" onClick={handleParseEditMapText} disabled={!editForm.mapText.trim()} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
+                    讀取
+                  </button>
+                </div>
+                <span className="mt-1 block text-xs text-gray-500">手機 Google Maps 可用「分享」複製連結；短網址請先打開後複製展開網址，或直接貼座標。</span>
+              </label>
 
               <details className="rounded-lg border border-gray-200 bg-gray-50 p-3">
                 <summary className="cursor-pointer text-sm font-medium text-gray-700">進階座標</summary>
