@@ -74,6 +74,10 @@ const toDate = (value: any, fallback = new Date()) => {
 };
 
 const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
+const toDateTimeInputValue = (date: Date) => {
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
+};
 
 const isObservationCountDescription = (text?: string) => {
   return Boolean(text?.startsWith('在您附近被觀察到') && text.includes('iNaturalist'));
@@ -127,7 +131,7 @@ export function CollectionPage() {
   const [filterCategory, setFilterCategory] = useState('All');
   const [isBadgesExpanded, setIsBadgesExpanded] = useState(false);
   const [editingRecord, setEditingRecord] = useState<CollectedRecord | null>(null);
-  const [editForm, setEditForm] = useState({ observedAt: '', weather: '', locationName: '', notes: '', photoUrl: '' });
+  const [editForm, setEditForm] = useState({ observedAt: '', weather: '', locationName: '', lat: '', lng: '', notes: '', photoUrl: '' });
 
   useEffect(() => {
     if (!user) {
@@ -193,9 +197,11 @@ export function CollectionPage() {
   const openEditor = (record: CollectedRecord) => {
     setEditingRecord(record);
     setEditForm({
-      observedAt: toDateInputValue(record.observedAt),
+      observedAt: toDateTimeInputValue(record.observedAt),
       weather: record.weather,
       locationName: record.locationName,
+      lat: record.animal.lat === undefined || record.animal.lat === null ? '' : String(record.animal.lat),
+      lng: record.animal.lng === undefined || record.animal.lng === null ? '' : String(record.animal.lng),
       notes: record.notes || (record.animal.characteristics !== '暫無資料' ? record.animal.characteristics || '' : ''),
       photoUrl: record.photoUrl,
     });
@@ -204,10 +210,14 @@ export function CollectionPage() {
   const handleSaveJournal = async () => {
     if (!editingRecord) return;
     try {
+      const lat = editForm.lat.trim() ? Number(editForm.lat) : null;
+      const lng = editForm.lng.trim() ? Number(editForm.lng) : null;
       await updateDoc(doc(db, 'user_collections', editingRecord.id), {
-        observedAt: new Date(editForm.observedAt || toDateInputValue(new Date())).toISOString(),
+        observedAt: new Date(editForm.observedAt || toDateTimeInputValue(new Date())).toISOString(),
         weather: editForm.weather,
         locationName: editForm.locationName,
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
         notes: editForm.notes,
         photoUrl: editForm.photoUrl,
         animalImageUrl: editForm.photoUrl || editingRecord.animal.imageUrl,
@@ -584,8 +594,8 @@ export function CollectionPage() {
             <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
               <div className="grid sm:grid-cols-2 gap-4">
                 <label className="block">
-                  <span className="text-sm font-medium text-gray-700">觀察日期</span>
-                  <input type="date" value={editForm.observedAt} onChange={e => setEditForm({ ...editForm, observedAt: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <span className="text-sm font-medium text-gray-700">觀察日期時間</span>
+                  <input type="datetime-local" value={editForm.observedAt} onChange={e => setEditForm({ ...editForm, observedAt: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-medium text-gray-700">天氣</span>
@@ -597,6 +607,17 @@ export function CollectionPage() {
                 <span className="text-sm font-medium text-gray-700">地點名稱</span>
                 <input value={editForm.locationName} onChange={e => setEditForm({ ...editForm, locationName: e.target.value })} placeholder="例如：大安森林公園" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
               </label>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700">緯度</span>
+                  <input type="number" step="any" value={editForm.lat} onChange={e => setEditForm({ ...editForm, lat: e.target.value })} placeholder="例如：25.033" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700">經度</span>
+                  <input type="number" step="any" value={editForm.lng} onChange={e => setEditForm({ ...editForm, lng: e.target.value })} placeholder="例如：121.565" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </label>
+              </div>
 
               <label className="block">
                 <span className="text-sm font-medium text-gray-700">照片</span>

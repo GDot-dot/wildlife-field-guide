@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
-import { getNearbySpecies, recognizeImageWithAI } from '../services/inaturalist';
+import { getNearbySpecies, recognizeImageWithAI, refineSpeciesByNameWithAI } from '../services/inaturalist';
 import { Animal } from '../types';
 import { MapPin, Loader2, AlertCircle, Filter, Plus, X, EyeOff, Upload, Search, Sparkles } from 'lucide-react';
 
@@ -55,6 +55,11 @@ const getInitialJournalNote = (animal: Animal) => {
   if (animal.characteristics && animal.characteristics !== '暫無資料') return animal.characteristics;
   if (animal.description && !animal.description.startsWith('在您附近被觀察到')) return animal.description;
   return '';
+};
+
+const getDateTimeInputValue = (date = new Date()) => {
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
 };
 
 const loadSavedState = () => {
@@ -110,6 +115,7 @@ export function ExplorePage() {
   // Custom Discovery Modal
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isRecognizing, setIsRecognizing] = useState(false);
+  const [isRefiningByName, setIsRefiningByName] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<Partial<Animal>>({
     name: '',
     scientificName: '',
@@ -118,6 +124,13 @@ export function ExplorePage() {
     habitat: '',
     category: 'Other',
     rarity: 'Common'
+  });
+  const [customObservation, setCustomObservation] = useState({
+    observedAt: getDateTimeInputValue(),
+    locationName: '',
+    lat: '',
+    lng: '',
+    weather: ''
   });
 
   useEffect(() => {
@@ -331,13 +344,47 @@ export function ExplorePage() {
           rarity: result.rarity || prev.rarity,
           description: result.description || prev.description,
           habitat: result.habitat || prev.habitat,
+          characteristics: result.characteristics || prev.characteristics,
+          diet: result.diet || prev.diet,
         }));
-        alert('AI 辨識成功！已為您自動填入資料。');
+        alert('AI 辨識成功！請確認名稱，必要時修正後再按「用名稱補正資料」。');
       }
     } catch (error) {
       alert('AI 辨識暫時無法使用，請手動輸入資料喔！');
     } finally {
       setIsRecognizing(false);
+    }
+  };
+
+  const handleRefineByName = async () => {
+    if (!customAnimal.name && !customAnimal.scientificName) {
+      alert('請先輸入生物名稱或學名。');
+      return;
+    }
+
+    setIsRefiningByName(true);
+    try {
+      const result = await refineSpeciesByNameWithAI(customAnimal.name || '', customAnimal.scientificName || '');
+      if (result?.error) {
+        alert(result.error);
+      } else if (result) {
+        setCustomAnimal(prev => ({
+          ...prev,
+          name: result.name || prev.name,
+          scientificName: result.scientificName || prev.scientificName,
+          category: result.category || prev.category,
+          rarity: result.rarity || prev.rarity,
+          description: result.description || prev.description,
+          characteristics: result.characteristics || prev.characteristics,
+          diet: result.diet || prev.diet,
+          habitat: result.habitat || prev.habitat,
+        }));
+        alert('已根據確認後的名稱補正資料。');
+      }
+    } catch (error) {
+      alert('AI 補正暫時無法使用，請稍後再試。');
+    } finally {
+      setIsRefiningByName(false);
     }
   };
 
@@ -354,6 +401,11 @@ export function ExplorePage() {
     try {
       const customId = `custom_${Date.now()}`;
       const recordId = `${user.uid}_${customId}`;
+      const manualLat = customObservation.lat.trim() ? Number(customObservation.lat) : null;
+      const manualLng = customObservation.lng.trim() ? Number(customObservation.lng) : null;
+      const observedAt = customObservation.observedAt
+        ? new Date(customObservation.observedAt).toISOString()
+        : new Date().toISOString();
       const dataToSave: any = {
         userId: user.uid,
         animalId: customId,
@@ -363,14 +415,16 @@ export function ExplorePage() {
         photoUrl: customAnimal.imageUrl,
         description: customAnimal.description || '',
         habitat: customAnimal.habitat || '',
+        characteristics: customAnimal.characteristics || '',
+        diet: customAnimal.diet || '',
         category: customAnimal.category || 'Other',
         rarity: customAnimal.rarity || 'Common',
-        lat: currentLocation?.lat ?? null,
-        lng: currentLocation?.lng ?? null,
-        locationName: locationName || '',
-        weather: currentWeather || '',
-        observedAt: new Date().toISOString(),
-        notes: customAnimal.description || '',
+        lat: Number.isFinite(manualLat) ? manualLat : currentLocation?.lat ?? null,
+        lng: Number.isFinite(manualLng) ? manualLng : currentLocation?.lng ?? null,
+        locationName: customObservation.locationName || locationName || '',
+        weather: customObservation.weather || currentWeather || '',
+        observedAt,
+        notes: customAnimal.characteristics || customAnimal.description || '',
         collectedAt: serverTimestamp()
       };
 
@@ -378,6 +432,13 @@ export function ExplorePage() {
       setIsCustomModalOpen(false);
       setCustomAnimal({
         name: '', scientificName: '', description: '', imageUrl: '', habitat: '', category: 'Other', rarity: 'Common'
+      });
+      setCustomObservation({
+        observedAt: getDateTimeInputValue(),
+        locationName: '',
+        lat: '',
+        lng: '',
+        weather: ''
       });
       alert('成功新增自訂發現！');
     } catch (error) {
@@ -613,13 +674,25 @@ export function ExplorePage() {
             <div className="p-6 overflow-y-auto flex-1 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">生物名稱 <span className="text-red-500">*</span></label>
-                <input 
-                  type="text" 
-                  value={customAnimal.name} 
-                  onChange={e => setCustomAnimal({...customAnimal, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                  placeholder="例如：台灣藍鵲"
-                />
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={customAnimal.name} 
+                    onChange={e => setCustomAnimal({...customAnimal, name: e.target.value})}
+                    className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                    placeholder="例如：台灣藍鵲"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRefineByName}
+                    disabled={isRefiningByName || (!customAnimal.name && !customAnimal.scientificName)}
+                    className="inline-flex items-center justify-center px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {isRefiningByName ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
+                    補正資料
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">AI 辨識後可先修正名稱，再用名稱補正特色、食性與棲地。</p>
               </div>
               
               <div>
@@ -709,6 +782,111 @@ export function ExplorePage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
                   placeholder="例如：Urocissa caerulea"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">特色</label>
+                  <textarea
+                    value={customAnimal.characteristics || ''}
+                    onChange={e => setCustomAnimal({...customAnimal, characteristics: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none resize-none h-20"
+                    placeholder="外觀、行為或辨識重點..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">食性 / 生長特徵</label>
+                  <textarea
+                    value={customAnimal.diet || ''}
+                    onChange={e => setCustomAnimal({...customAnimal, diet: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none resize-none h-20"
+                    placeholder="動物可填食性，植物可填生長環境或辨識特徵..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">棲地 / 生長環境</label>
+                  <textarea
+                    value={customAnimal.habitat || ''}
+                    onChange={e => setCustomAnimal({...customAnimal, habitat: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none resize-none h-20"
+                    placeholder="例如：森林、濕地、溪流、都市綠地..."
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-4">
+                <div>
+                  <h4 className="font-bold text-gray-800">觀察時間與地點</h4>
+                  <p className="text-xs text-gray-500 mt-1">可回家後補登，不一定要使用目前 GPS。</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">觀察日期時間</label>
+                    <input
+                      type="datetime-local"
+                      value={customObservation.observedAt}
+                      onChange={e => setCustomObservation({...customObservation, observedAt: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">天氣</label>
+                    <input
+                      value={customObservation.weather}
+                      onChange={e => setCustomObservation({...customObservation, weather: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                      placeholder={currentWeather || '例如：晴朗，28°C'}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">地點名稱</label>
+                  <input
+                    value={customObservation.locationName}
+                    onChange={e => setCustomObservation({...customObservation, locationName: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                    placeholder={locationName || '例如：大安森林公園'}
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">緯度</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={customObservation.lat}
+                      onChange={e => setCustomObservation({...customObservation, lat: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                      placeholder={currentLocation ? String(currentLocation.lat) : '25.033'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">經度</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={customObservation.lng}
+                      onChange={e => setCustomObservation({...customObservation, lng: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                      placeholder={currentLocation ? String(currentLocation.lng) : '121.565'}
+                    />
+                  </div>
+                </div>
+                {currentLocation && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomObservation({
+                      observedAt: customObservation.observedAt,
+                      locationName: customObservation.locationName || locationName || '',
+                      lat: String(currentLocation.lat),
+                      lng: String(currentLocation.lng),
+                      weather: customObservation.weather || currentWeather || ''
+                    })}
+                    className="text-sm font-medium text-green-700 hover:text-green-900"
+                  >
+                    使用目前定位與天氣
+                  </button>
+                )}
               </div>
 
               <div>

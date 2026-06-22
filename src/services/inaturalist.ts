@@ -13,9 +13,11 @@ interface AIRecognitionResult {
   rarity?: Animal['rarity'];
   description?: string;
   habitat?: string;
+  characteristics?: string;
+  diet?: string;
 }
 
-async function callAIProxy<T>(action: 'recognize' | 'enrich', payload: Record<string, unknown>): Promise<T | null> {
+async function callAIProxy<T>(action: 'recognize' | 'enrich' | 'refine', payload: Record<string, unknown>): Promise<T | null> {
   if (!AI_PROXY_URL) return null;
 
   const response = await fetch(AI_PROXY_URL, {
@@ -30,6 +32,11 @@ async function callAIProxy<T>(action: 'recognize' | 'enrich', payload: Record<st
 
   return response.json();
 }
+
+const parseJsonResponse = (text?: string) => {
+  if (!text) return null;
+  return JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim());
+};
 
 const recognitionPrompt = `
 請辨識這張圖片中的生物（動物或植物）。
@@ -50,6 +57,25 @@ const buildEnrichmentPrompt = (animals: Partial<Animal>[]) => `
 如果找不到該物種的資料，請盡量根據其科屬推測或填寫「暫無資料」。
 物種列表：
 ${animals.map(a => a.scientificName).join('\n')}
+`;
+
+const buildNameRefinementPrompt = (name: string, scientificName?: string) => `
+使用者已查證並修正物種名稱，請以這個名稱為準，重新整理更正確的繁體中文物種資料。
+
+中文名稱：${name}
+學名：${scientificName || '未知，請盡量查證或推測'}
+
+請只回傳 JSON，包含以下欄位：
+- name: 確認後的中文俗名
+- scientificName: 正確學名，若無法確認請保留空字串
+- category: Birds, Insects, Reptiles, Spiders, Flowers, Trees, Other 之一
+- rarity: Common, Uncommon, Rare, Epic, Legendary 之一，依台灣常見程度推測
+- description: 50 字內的自然觀察摘要，不要寫「被觀察到幾次」
+- characteristics: 外觀、行為或辨識特色，繁體中文
+- diet: 食性；若為植物請填生長環境或辨識特徵
+- habitat: 棲地或生長環境
+
+如果名稱太模糊無法判斷，請回傳 { "error": "名稱不足，無法補正物種資料" }。
 `;
 
 export async function recognizeImageWithAI(imageUrlOrBase64: string): Promise<AIRecognitionResult | null> {
@@ -113,7 +139,7 @@ export async function recognizeImageWithAI(imageUrlOrBase64: string): Promise<AI
       }
     });
 
-    return response.text ? JSON.parse(response.text) : null;
+    return parseJsonResponse(response.text);
   } catch (e) {
     console.error("AI recognition failed", e);
     throw new Error("AI 辨識失敗或額度已滿");
@@ -139,11 +165,44 @@ async function enrichAnimalDataWithAI(animals: Partial<Animal>[]) {
       }
     });
 
-    return response.text ? JSON.parse(response.text) : {};
+    return parseJsonResponse(response.text) || {};
   } catch (e) {
     console.error("AI enrichment failed", e);
   }
   return {};
+}
+
+export async function refineSpeciesByNameWithAI(name: string, scientificName?: string): Promise<AIRecognitionResult | null> {
+  const trimmedName = name.trim();
+  const trimmedScientificName = scientificName?.trim();
+
+  if (!trimmedName && !trimmedScientificName) {
+    return { error: '請先輸入中文名稱或學名。' };
+  }
+
+  try {
+    if (AI_PROXY_URL) {
+      return await callAIProxy<AIRecognitionResult>('refine', { name: trimmedName, scientificName: trimmedScientificName }) ||
+        { error: 'AI 補正服務沒有回傳結果。' };
+    }
+
+    if (!ai) {
+      return { error: 'AI 補正尚未設定 GEMINI_API_KEY。' };
+    }
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: buildNameRefinementPrompt(trimmedName, trimmedScientificName),
+      config: {
+        responseMimeType: 'application/json',
+      }
+    });
+
+    return parseJsonResponse(response.text);
+  } catch (e) {
+    console.error("AI name refinement failed", e);
+    throw new Error("AI 補正失敗或額度已滿");
+  }
 }
 
 export async function getNearbySpecies(lat: number, lng: number, page: number = 1, category: string = 'All', radius: number = 5): Promise<Animal[]> {
