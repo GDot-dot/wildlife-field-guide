@@ -21,6 +21,36 @@ const CATEGORIES = [
 
 const EXPLORE_STATE_KEY = 'explore_page_state';
 
+const formatWeather = (weatherCode?: number, temperature?: number) => {
+  const labels: Record<number, string> = {
+    0: '晴朗',
+    1: '大致晴朗',
+    2: '局部多雲',
+    3: '陰天',
+    45: '有霧',
+    48: '霧淞',
+    51: '毛毛雨',
+    53: '毛毛雨',
+    55: '毛毛雨',
+    61: '小雨',
+    63: '雨',
+    65: '大雨',
+    80: '陣雨',
+    81: '陣雨',
+    82: '強陣雨',
+    95: '雷雨',
+  };
+  const label = weatherCode === undefined ? '未知天氣' : labels[weatherCode] || '天氣資料';
+  return temperature === undefined ? label : `${label}，${Math.round(temperature)}°C`;
+};
+
+const fetchCurrentWeather = async (lat: number, lng: number) => {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&timezone=auto`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return formatWeather(data.current_weather?.weathercode, data.current_weather?.temperature);
+};
+
 const loadSavedState = () => {
   try {
     const saved = sessionStorage.getItem(EXPLORE_STATE_KEY);
@@ -47,6 +77,7 @@ export function ExplorePage() {
   const [radius, setRadius] = useState(savedState?.radius || 5);
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(savedState?.currentLocation || null);
   const [locationName, setLocationName] = useState<string | null>(savedState?.locationName || null);
+  const [currentWeather, setCurrentWeather] = useState<string | null>(savedState?.currentWeather || null);
   const [hasMore, setHasMore] = useState(savedState?.hasMore ?? true);
   const [showUncollectedOnly, setShowUncollectedOnly] = useState(savedState?.showUncollectedOnly || false);
   const [rarityFilter, setRarityFilter] = useState<string>(savedState?.rarityFilter || 'All');
@@ -61,13 +92,14 @@ export function ExplorePage() {
       radius,
       currentLocation,
       locationName,
+      currentWeather,
       hasMore,
       showUncollectedOnly,
       rarityFilter,
       searchTerm
     };
     sessionStorage.setItem(EXPLORE_STATE_KEY, JSON.stringify(stateToSave));
-  }, [animals, page, category, radius, currentLocation, locationName, hasMore, showUncollectedOnly, rarityFilter, searchTerm]);
+  }, [animals, page, category, radius, currentLocation, locationName, currentWeather, hasMore, showUncollectedOnly, rarityFilter, searchTerm]);
 
   // Custom Discovery Modal
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
@@ -135,6 +167,7 @@ export function ExplorePage() {
         const { latitude, longitude } = position.coords;
         setCurrentLocation({ lat: latitude, lng: longitude });
         setLocationName(null);
+        setCurrentWeather(null);
 
         // Reverse geocoding to get location name
         try {
@@ -149,6 +182,12 @@ export function ExplorePage() {
           }
         } catch (e) {
           console.error("Reverse geocoding failed", e);
+        }
+
+        try {
+          setCurrentWeather(await fetchCurrentWeather(latitude, longitude));
+        } catch (e) {
+          console.error("Weather lookup failed", e);
         }
 
         await fetchSpecies(latitude, longitude, 1, category, radius, false);
@@ -206,12 +245,19 @@ export function ExplorePage() {
         userId: user.uid,
         animalId: String(animal.id),
         animalName: animal.name || '',
+        animalScientificName: animal.scientificName || '',
         animalImageUrl: animal.imageUrl || '',
+        photoUrl: animal.imageUrl || '',
         description: animal.description || '',
         habitat: animal.habitat || '',
         category: animal.category || 'Other',
+        rarity: animal.rarity || 'Common',
         lat: currentLocation?.lat ?? null,
         lng: currentLocation?.lng ?? null,
+        locationName: locationName || '',
+        weather: currentWeather || '',
+        observedAt: new Date().toISOString(),
+        notes: '',
         collectedAt: serverTimestamp()
       };
       
@@ -308,12 +354,17 @@ export function ExplorePage() {
         animalName: customAnimal.name,
         animalScientificName: customAnimal.scientificName || '',
         animalImageUrl: customAnimal.imageUrl,
+        photoUrl: customAnimal.imageUrl,
         description: customAnimal.description || '',
         habitat: customAnimal.habitat || '',
         category: customAnimal.category || 'Other',
         rarity: customAnimal.rarity || 'Common',
         lat: currentLocation?.lat ?? null,
         lng: currentLocation?.lng ?? null,
+        locationName: locationName || '',
+        weather: currentWeather || '',
+        observedAt: new Date().toISOString(),
+        notes: customAnimal.description || '',
         collectedAt: serverTimestamp()
       };
 
@@ -379,6 +430,7 @@ export function ExplorePage() {
             <MapPin className="w-5 h-5 mr-2" />
             <span className="text-sm font-bold">
               {locationName ? `目前位置：${locationName}` : '已取得定位，正在解析地址...'}
+              {currentWeather ? `｜${currentWeather}` : ''}
             </span>
           </div>
         )}

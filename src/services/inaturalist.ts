@@ -1,9 +1,58 @@
 import { Animal } from '../types';
 import { GoogleGenAI } from '@google/genai';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const AI_PROXY_URL = process.env.VITE_AI_PROXY_URL || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
-export async function recognizeImageWithAI(imageUrlOrBase64: string) {
+interface AIRecognitionResult {
+  error?: string;
+  name?: string;
+  scientificName?: string;
+  category?: string;
+  rarity?: Animal['rarity'];
+  description?: string;
+  habitat?: string;
+}
+
+async function callAIProxy<T>(action: 'recognize' | 'enrich', payload: Record<string, unknown>): Promise<T | null> {
+  if (!AI_PROXY_URL) return null;
+
+  const response = await fetch(AI_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...payload }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`AI proxy failed with ${response.status}`);
+  }
+
+  return response.json();
+}
+
+const recognitionPrompt = `
+請辨識這張圖片中的生物（動物或植物）。
+請回傳 JSON 格式，包含以下欄位：
+- name: 生物的中文俗名
+- scientificName: 學名
+- category: 分類，必須是以下之一：Birds, Insects, Reptiles, Spiders, Flowers, Trees, Other
+- rarity: 稀有度，必須是以下之一：Common, Uncommon, Rare, Epic, Legendary (請根據該物種在台灣的常見程度推測)
+- description: 關於這個生物的特色描述與觀察筆記 (約50字)
+- habitat: 棲息地描述
+
+如果圖片中沒有生物，或者無法辨識，請回傳 { "error": "無法辨識圖片中的生物" }。
+`;
+
+const buildEnrichmentPrompt = (animals: Partial<Animal>[]) => `
+請為以下生物(動物或植物)提供繁體中文的特色說明、棲息地與食性(若是植物請填寫生長環境或特徵)。
+請回傳 JSON 格式，key 為學名 (scientificName)，value 為包含 characteristics, habitat, diet 的物件。
+如果找不到該物種的資料，請盡量根據其科屬推測或填寫「暫無資料」。
+物種列表：
+${animals.map(a => a.scientificName).join('\n')}
+`;
+
+export async function recognizeImageWithAI(imageUrlOrBase64: string): Promise<AIRecognitionResult | null> {
   let mimeType = 'image/jpeg';
   let base64Data = imageUrlOrBase64;
 
@@ -36,29 +85,25 @@ export async function recognizeImageWithAI(imageUrlOrBase64: string) {
     }
   }
 
-  const prompt = `
-  請辨識這張圖片中的生物（動物或植物）。
-  請回傳 JSON 格式，包含以下欄位：
-  - name: 生物的中文俗名
-  - scientificName: 學名
-  - category: 分類，必須是以下之一：Birds, Insects, Reptiles, Spiders, Flowers, Trees, Other
-  - rarity: 稀有度，必須是以下之一：Common, Uncommon, Rare, Epic, Legendary (請根據該物種在台灣的常見程度推測)
-  - description: 關於這個生物的特色描述與觀察筆記 (約50字)
-  - habitat: 棲息地描述
-
-  如果圖片中沒有生物，或者無法辨識，請回傳 { "error": "無法辨識圖片中的生物" }。
-  `;
-
   try {
+    if (AI_PROXY_URL) {
+      const result = await callAIProxy<AIRecognitionResult>('recognize', { imageBase64: base64Data, mimeType });
+      return result || { error: 'AI 辨識服務沒有回傳結果。' };
+    }
+
+    if (!ai) {
+      return { error: 'AI 辨識尚未設定 GEMINI_API_KEY。' };
+    }
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
-          { text: prompt },
+          { text: recognitionPrompt },
           {
             inlineData: {
               data: base64Data,
-              mimeType: mimeType
+              mimeType
             }
           }
         ]
@@ -68,10 +113,7 @@ export async function recognizeImageWithAI(imageUrlOrBase64: string) {
       }
     });
 
-    const text = response.text;
-    if (text) {
-      return JSON.parse(text);
-    }
+    return response.text ? JSON.parse(response.text) : null;
   } catch (e) {
     console.error("AI recognition failed", e);
     throw new Error("AI 辨識失敗或額度已滿");
@@ -82,36 +124,22 @@ export async function recognizeImageWithAI(imageUrlOrBase64: string) {
 async function enrichAnimalDataWithAI(animals: Partial<Animal>[]) {
   if (animals.length === 0) return {};
 
-  const prompt = `
-  請為以下生物(動物或植物)提供繁體中文的特色說明、棲息地與食性(若是植物請填寫生長環境或特徵)。
-  請回傳 JSON 格式，key 為學名 (scientificName)，value 為包含 characteristics, habitat, diet 的物件。
-  如果找不到該物種的資料，請盡量根據其科屬推測或填寫「暫無資料」。
-  物種列表：
-  ${animals.map(a => a.scientificName).join('\n')}
-  
-  JSON 格式範例：
-  {
-    "Passer montanus": {
-      "characteristics": "體型小巧，頭部呈栗褐色，臉頰有明顯黑斑。",
-      "habitat": "都市、農田、鄉村",
-      "diet": "雜食性，以種子、穀物與昆蟲為主"
-    }
-  }
-  `;
-  
   try {
+    if (AI_PROXY_URL) {
+      return await callAIProxy('enrich', { species: animals.map(a => a.scientificName).filter(Boolean) }) || {};
+    }
+
+    if (!ai) return {};
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
+      contents: buildEnrichmentPrompt(animals),
       config: {
         responseMimeType: 'application/json',
       }
     });
-    
-    const text = response.text;
-    if (text) {
-      return JSON.parse(text);
-    }
+
+    return response.text ? JSON.parse(response.text) : {};
   } catch (e) {
     console.error("AI enrichment failed", e);
   }
@@ -145,9 +173,11 @@ export async function getNearbySpecies(lat: number, lng: number, page: number = 
       const count = result.count;
       
       // Determine rarity based on observation count in the area
-      let rarity: 'Common' | 'Uncommon' | 'Rare' = 'Common';
-      if (count < 5) rarity = 'Rare';
-      else if (count < 15) rarity = 'Uncommon';
+      let rarity: Animal['rarity'] = 'Common';
+      if (count <= 1) rarity = 'Legendary';
+      else if (count <= 3) rarity = 'Epic';
+      else if (count < 8) rarity = 'Rare';
+      else if (count < 20) rarity = 'Uncommon';
 
       // Map iconic_taxon_name to category
       let animalCategory = 'Other';

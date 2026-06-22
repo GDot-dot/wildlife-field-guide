@@ -4,6 +4,7 @@ import { CheckCircle2, PlusCircle, Trash2 } from 'lucide-react';
 import { cn } from './Navbar';
 
 interface AnimalCardProps {
+  key?: React.Key;
   animal: Animal;
   isCollected: boolean;
   onCollect?: (animal: Animal) => void;

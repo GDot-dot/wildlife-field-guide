@@ -22,7 +22,7 @@ export function Navbar() {
               <div className="bg-green-100 p-2 rounded-xl group-hover:bg-green-200 transition-colors">
                 <Leaf className="w-6 h-6 text-green-600" />
               </div>
-              <span className="font-bold text-xl text-green-900 tracking-tight">生態圖鑑 (Wildlife Field Guide)V3.0</span>
+              <span className="font-bold text-xl text-green-900 tracking-tight">生態圖鑑</span>
             </Link>
             
             <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
@@ -35,7 +35,7 @@ export function Navbar() {
                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                 )}
               >
-                探索生物
+                  探索
               </Link>
               {user && (
                 <Link
@@ -48,7 +48,7 @@ export function Navbar() {
                   )}
                 >
                   <BookOpen className="w-4 h-4 mr-2" />
-                  我的蒐集
+                  日誌
                 </Link>
               )}
             </div>
@@ -97,7 +97,7 @@ export function Navbar() {
               : "text-gray-600 hover:bg-gray-50"
           )}
         >
-          探索生物
+          探索
         </Link>
         {user && (
           <Link
@@ -110,7 +110,7 @@ export function Navbar() {
             )}
           >
             <BookOpen className="w-4 h-4 mr-2" />
-            我的蒐集
+            日誌
           </Link>
         )}
       </div>
