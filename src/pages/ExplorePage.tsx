@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
+import { geocodePlaceName, getBrowserLocation } from '../lib/locationUtils';
 import { getNearbySpecies, recognizeImageWithAI, refineSpeciesByNameWithAI } from '../services/inaturalist';
 import { Animal } from '../types';
 import { MapPin, Loader2, AlertCircle, Filter, Plus, X, EyeOff, Upload, Search, Sparkles } from 'lucide-react';
@@ -116,6 +117,7 @@ export function ExplorePage() {
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [isRefiningByName, setIsRefiningByName] = useState(false);
+  const [isResolvingCustomPlace, setIsResolvingCustomPlace] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<Partial<Animal>>({
     name: '',
     scientificName: '',
@@ -443,6 +445,52 @@ export function ExplorePage() {
       alert('成功新增自訂發現！');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `user_collections/custom`);
+    }
+  };
+
+  const handleResolveCustomPlace = async () => {
+    if (!customObservation.locationName.trim()) {
+      alert('請先輸入地點名稱，例如：大安森林公園。');
+      return;
+    }
+
+    setIsResolvingCustomPlace(true);
+    try {
+      const place = await geocodePlaceName(customObservation.locationName);
+      if (!place) {
+        alert('找不到這個地點，請換更完整的名稱試試。');
+        return;
+      }
+      setCustomObservation(prev => ({
+        ...prev,
+        locationName: prev.locationName || place.name,
+        lat: String(place.lat),
+        lng: String(place.lng),
+      }));
+    } catch (error) {
+      alert('地點查找失敗，請稍後再試。');
+    } finally {
+      setIsResolvingCustomPlace(false);
+    }
+  };
+
+  const handleUseCurrentLocationForCustom = async () => {
+    setIsResolvingCustomPlace(true);
+    try {
+      const place = currentLocation
+        ? { name: locationName || '目前位置', lat: currentLocation.lat, lng: currentLocation.lng }
+        : await getBrowserLocation();
+      setCustomObservation(prev => ({
+        ...prev,
+        locationName: prev.locationName || place.name,
+        lat: String(place.lat),
+        lng: String(place.lng),
+        weather: prev.weather || currentWeather || ''
+      }));
+    } catch (error) {
+      alert('無法取得目前位置，請確認瀏覽器定位權限。');
+    } finally {
+      setIsResolvingCustomPlace(false);
     }
   };
 
@@ -841,52 +889,60 @@ export function ExplorePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">地點名稱</label>
-                  <input
-                    value={customObservation.locationName}
-                    onChange={e => setCustomObservation({...customObservation, locationName: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                    placeholder={locationName || '例如：大安森林公園'}
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">緯度</label>
+                  <div className="flex gap-2">
                     <input
-                      type="number"
-                      step="any"
-                      value={customObservation.lat}
-                      onChange={e => setCustomObservation({...customObservation, lat: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                      placeholder={currentLocation ? String(currentLocation.lat) : '25.033'}
+                      value={customObservation.locationName}
+                      onChange={e => setCustomObservation({...customObservation, locationName: e.target.value})}
+                      className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                      placeholder={locationName || '例如：大安森林公園'}
                     />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">經度</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={customObservation.lng}
-                      onChange={e => setCustomObservation({...customObservation, lng: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                      placeholder={currentLocation ? String(currentLocation.lng) : '121.565'}
-                    />
+                    <button
+                      type="button"
+                      onClick={handleResolveCustomPlace}
+                      disabled={isResolvingCustomPlace || !customObservation.locationName.trim()}
+                      className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {isResolvingCustomPlace ? '查找中...' : '查找座標'}
+                    </button>
                   </div>
                 </div>
-                {currentLocation && (
+                <details className="rounded-lg border border-gray-200 bg-white p-3">
+                  <summary className="cursor-pointer text-sm font-medium text-gray-700">進階座標</summary>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">緯度</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={customObservation.lat}
+                        onChange={e => setCustomObservation({...customObservation, lat: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                        placeholder={currentLocation ? String(currentLocation.lat) : '25.033'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">經度</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={customObservation.lng}
+                        onChange={e => setCustomObservation({...customObservation, lng: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                        placeholder={currentLocation ? String(currentLocation.lng) : '121.565'}
+                      />
+                    </div>
+                  </div>
+                </details>
+                <div>
                   <button
                     type="button"
-                    onClick={() => setCustomObservation({
-                      observedAt: customObservation.observedAt,
-                      locationName: customObservation.locationName || locationName || '',
-                      lat: String(currentLocation.lat),
-                      lng: String(currentLocation.lng),
-                      weather: customObservation.weather || currentWeather || ''
-                    })}
-                    className="text-sm font-medium text-green-700 hover:text-green-900"
+                    onClick={handleUseCurrentLocationForCustom}
+                    disabled={isResolvingCustomPlace}
+                    className="text-sm font-medium text-green-700 hover:text-green-900 disabled:opacity-50"
                   >
                     使用目前定位與天氣
                   </button>
-                )}
+                </div>
               </div>
 
               <div>

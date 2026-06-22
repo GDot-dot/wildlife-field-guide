@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
+import { geocodePlaceName, getBrowserLocation } from '../lib/locationUtils';
 import { Link } from 'react-router-dom';
 import { BookOpen, Leaf, Map as MapIcon, PieChart, List, Award, Search, ChevronDown, ChevronUp, CalendarDays, Edit3, X, Upload, Clock, MapPin, CloudSun, CheckCircle2 } from 'lucide-react';
 import { Animal } from '../types';
@@ -132,6 +133,7 @@ export function CollectionPage() {
   const [isBadgesExpanded, setIsBadgesExpanded] = useState(false);
   const [editingRecord, setEditingRecord] = useState<CollectedRecord | null>(null);
   const [editForm, setEditForm] = useState({ observedAt: '', weather: '', locationName: '', lat: '', lng: '', notes: '', photoUrl: '' });
+  const [isResolvingEditPlace, setIsResolvingEditPlace] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -235,6 +237,49 @@ export function CollectionPage() {
     setEditForm(prev => ({ ...prev, photoUrl: prev.photoUrl }));
     const photoUrl = await compressImageFile(file);
     setEditForm(prev => ({ ...prev, photoUrl }));
+  };
+
+  const handleResolveEditPlace = async () => {
+    if (!editForm.locationName.trim()) {
+      alert('請先輸入地點名稱，例如：大安森林公園。');
+      return;
+    }
+
+    setIsResolvingEditPlace(true);
+    try {
+      const place = await geocodePlaceName(editForm.locationName);
+      if (!place) {
+        alert('找不到這個地點，請換更完整的名稱試試。');
+        return;
+      }
+      setEditForm(prev => ({
+        ...prev,
+        locationName: prev.locationName || place.name,
+        lat: String(place.lat),
+        lng: String(place.lng),
+      }));
+    } catch (error) {
+      alert('地點查找失敗，請稍後再試。');
+    } finally {
+      setIsResolvingEditPlace(false);
+    }
+  };
+
+  const handleUseCurrentLocationForEdit = async () => {
+    setIsResolvingEditPlace(true);
+    try {
+      const place = await getBrowserLocation();
+      setEditForm(prev => ({
+        ...prev,
+        locationName: prev.locationName || place.name,
+        lat: String(place.lat),
+        lng: String(place.lng),
+      }));
+    } catch (error) {
+      alert('無法取得目前位置，請確認瀏覽器定位權限。');
+    } finally {
+      setIsResolvingEditPlace(false);
+    }
   };
 
   if (!user) {
@@ -605,19 +650,36 @@ export function CollectionPage() {
 
               <label className="block">
                 <span className="text-sm font-medium text-gray-700">地點名稱</span>
-                <input value={editForm.locationName} onChange={e => setEditForm({ ...editForm, locationName: e.target.value })} placeholder="例如：大安森林公園" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                <div className="mt-1 flex gap-2">
+                  <input value={editForm.locationName} onChange={e => setEditForm({ ...editForm, locationName: e.target.value })} placeholder="例如：大安森林公園" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  <button type="button" onClick={handleResolveEditPlace} disabled={isResolvingEditPlace || !editForm.locationName.trim()} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
+                    {isResolvingEditPlace ? '查找中...' : '查找座標'}
+                  </button>
+                </div>
               </label>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="text-sm font-medium text-gray-700">緯度</span>
-                  <input type="number" step="any" value={editForm.lat} onChange={e => setEditForm({ ...editForm, lat: e.target.value })} placeholder="例如：25.033" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-                </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-gray-700">經度</span>
-                  <input type="number" step="any" value={editForm.lng} onChange={e => setEditForm({ ...editForm, lng: e.target.value })} placeholder="例如：121.565" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-                </label>
+              <div className="flex flex-wrap gap-3">
+                <button type="button" onClick={handleUseCurrentLocationForEdit} disabled={isResolvingEditPlace} className="text-sm font-medium text-green-700 hover:text-green-900 disabled:opacity-50">
+                  使用目前位置
+                </button>
+                {(editForm.lat && editForm.lng) && (
+                  <span className="text-xs text-gray-500">已設定座標：{Number(editForm.lat).toFixed(5)}, {Number(editForm.lng).toFixed(5)}</span>
+                )}
               </div>
+
+              <details className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <summary className="cursor-pointer text-sm font-medium text-gray-700">進階座標</summary>
+                <div className="grid sm:grid-cols-2 gap-4 mt-3">
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700">緯度</span>
+                    <input type="number" step="any" value={editForm.lat} onChange={e => setEditForm({ ...editForm, lat: e.target.value })} placeholder="例如：25.033" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700">經度</span>
+                    <input type="number" step="any" value={editForm.lng} onChange={e => setEditForm({ ...editForm, lng: e.target.value })} placeholder="例如：121.565" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  </label>
+                </div>
+              </details>
 
               <label className="block">
                 <span className="text-sm font-medium text-gray-700">照片</span>
