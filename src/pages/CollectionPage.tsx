@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
 import { Link } from 'react-router-dom';
-import { BookOpen, Leaf, Map as MapIcon, PieChart, List, Award, Search, ChevronDown, ChevronUp, CalendarDays, Edit3, X, Upload, Clock, MapPin, CloudSun } from 'lucide-react';
+import { BookOpen, Leaf, Map as MapIcon, PieChart, List, Award, Search, ChevronDown, ChevronUp, CalendarDays, Edit3, X, Upload, Clock, MapPin, CloudSun, CheckCircle2 } from 'lucide-react';
 import { Animal } from '../types';
 import { animals as fallbackAnimals } from '../data/animals';
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
@@ -48,6 +48,22 @@ const CATEGORY_TRANSLATIONS: Record<string, string> = {
   Flowers: '花',
   Trees: '樹木',
   Other: '其他',
+};
+
+const RARITY_LABELS: Record<Animal['rarity'], string> = {
+  Common: '常見',
+  Uncommon: '少見',
+  Rare: '稀有',
+  Epic: '史詩',
+  Legendary: '傳說',
+};
+
+const RARITY_COLORS: Record<Animal['rarity'], string> = {
+  Common: 'bg-gray-100 text-gray-700 border-gray-200',
+  Uncommon: 'bg-blue-50 text-blue-700 border-blue-200',
+  Rare: 'bg-purple-50 text-purple-700 border-purple-200',
+  Epic: 'bg-pink-50 text-pink-700 border-pink-200',
+  Legendary: 'bg-yellow-50 text-yellow-700 border-yellow-200 shadow-sm',
 };
 
 const toDate = (value: any, fallback = new Date()) => {
@@ -287,44 +303,88 @@ export function CollectionPage() {
     }
   };
 
-  const renderRecordCard = (record: CollectedRecord) => (
-    <article key={record.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-      <img src={record.photoUrl || record.animal.imageUrl} alt={record.animal.name} className="h-48 w-full object-cover bg-gray-100" referrerPolicy="no-referrer" />
-      <div className="p-4 flex flex-col gap-3 flex-1">
-        <div>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">{record.animal.name}</h3>
-              <p className="text-sm text-gray-500 italic">{record.animal.scientificName}</p>
-            </div>
-            <span className="rounded-full bg-green-50 border border-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
-              {record.animal.rarity === 'Common' ? '常見' : record.animal.rarity === 'Uncommon' ? '少見' : record.animal.rarity === 'Rare' ? '稀有' : record.animal.rarity === 'Epic' ? '史詩' : '傳說'}
+  const renderRecordCard = (record: CollectedRecord) => {
+    const journalNote = record.notes?.trim();
+    const shouldShowJournalNote = journalNote &&
+      journalNote !== record.animal.characteristics &&
+      journalNote !== record.animal.description;
+
+    return (
+      <article key={record.id} className="group relative flex flex-col bg-white rounded-2xl overflow-hidden border border-green-200 shadow-sm transition-all duration-300 hover:shadow-xl">
+        <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+          <img
+            src={record.photoUrl || record.animal.imageUrl}
+            alt={record.animal.name}
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+          <div className="absolute top-3 left-3 flex gap-2">
+            <span className={`px-2.5 py-1 rounded-full text-xs font-medium border backdrop-blur-md bg-white/80 ${RARITY_COLORS[record.animal.rarity]}`}>
+              {RARITY_LABELS[record.animal.rarity]}
             </span>
+          </div>
+          <div className="absolute top-3 right-3 bg-green-500 text-white p-1.5 rounded-full shadow-lg">
+            <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="grid gap-2 text-sm text-gray-600">
-          <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-green-600" />{record.observedAt.toLocaleDateString()}</div>
-          {record.locationName && <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-green-600" />{record.locationName}</div>}
-          {record.weather && <div className="flex items-center gap-2"><CloudSun className="w-4 h-4 text-green-600" />{record.weather}</div>}
-        </div>
+        <div className="p-5 flex flex-col flex-grow">
+          <div className="mb-2">
+            <h3 className="text-xl font-bold text-gray-900">{record.animal.name}</h3>
+            <p className="text-sm text-gray-500 italic font-serif">{record.animal.scientificName}</p>
+          </div>
 
-        <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 min-h-[68px]">
-          {pickJournalText(record)}
-        </p>
+          <div className="text-sm text-gray-600 mb-4 flex-grow space-y-3">
+            <p className="font-medium text-green-800 bg-green-50 p-2.5 rounded-lg border border-green-100">
+              {record.animal.description}
+            </p>
 
-        <div className="mt-auto flex gap-2 pt-2">
-          <button onClick={() => openEditor(record)} className="flex-1 inline-flex items-center justify-center rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100">
-            <Edit3 className="w-4 h-4 mr-1.5" />
-            編輯日誌
-          </button>
-          <button onClick={() => handleUncollect(record.animal)} className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100">
-            刪除
-          </button>
+            {record.animal.characteristics && (
+              <p className="leading-relaxed">
+                <span className="font-bold text-gray-700 block mb-0.5">✨ 特色：</span>
+                {record.animal.characteristics}
+              </p>
+            )}
+
+            {record.animal.diet && (
+              <p className="leading-relaxed">
+                <span className="font-bold text-gray-700 block mb-0.5">🍽️ 食性：</span>
+                {record.animal.diet}
+              </p>
+            )}
+
+            <p className="leading-relaxed">
+              <span className="font-bold text-gray-700 block mb-0.5">🏡 棲地：</span>
+              {record.animal.habitat}
+            </p>
+
+            {shouldShowJournalNote && (
+              <p className="leading-relaxed bg-amber-50 border border-amber-100 rounded-lg p-2.5">
+                <span className="font-bold text-gray-700 block mb-0.5">📝 觀察筆記：</span>
+                {journalNote}
+              </p>
+            )}
+
+            <div className="grid gap-1.5 text-xs text-gray-500 border-t border-gray-50 pt-3">
+              <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-green-600" />{record.observedAt.toLocaleDateString()}</div>
+              {record.locationName && <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-green-600" />{record.locationName}</div>}
+              {record.weather && <div className="flex items-center gap-2"><CloudSun className="w-4 h-4 text-green-600" />{record.weather}</div>}
+            </div>
+          </div>
+
+          <div className="mt-auto flex gap-2 pt-4 border-t border-gray-50">
+            <button onClick={() => openEditor(record)} className="flex-1 inline-flex items-center justify-center rounded-xl bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100">
+              <Edit3 className="w-4 h-4 mr-1.5" />
+              編輯日誌
+            </button>
+            <button onClick={() => handleUncollect(record.animal)} className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100">
+              刪除
+            </button>
+          </div>
         </div>
-      </div>
-    </article>
-  );
+      </article>
+    );
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
