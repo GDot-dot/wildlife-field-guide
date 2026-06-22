@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
-import { geocodePlaceName, getBrowserLocation, parseCoordinatesFromText } from '../lib/locationUtils';
+import { geocodePlaceName, getBrowserLocation, googleMapsUrl, parseCoordinatesFromText } from '../lib/locationUtils';
 import { Link } from 'react-router-dom';
 import { BookOpen, Leaf, Map as MapIcon, PieChart, List, Award, Search, ChevronDown, ChevronUp, CalendarDays, Edit3, X, Upload, Clock, MapPin, CloudSun, CheckCircle2 } from 'lucide-react';
 import { Animal } from '../types';
@@ -296,6 +296,16 @@ export function CollectionPage() {
     } finally {
       setIsResolvingEditPlace(false);
     }
+  };
+
+  const handleClearEditLocation = () => {
+    setEditForm(prev => ({
+      ...prev,
+      locationName: '',
+      mapText: '',
+      lat: '',
+      lng: '',
+    }));
   };
 
   if (!user) {
@@ -664,47 +674,80 @@ export function CollectionPage() {
                 </label>
               </div>
 
-              <label className="block">
-                <span className="text-sm font-medium text-gray-700">地點名稱</span>
-                <div className="mt-1 flex gap-2">
-                  <input value={editForm.locationName} onChange={e => setEditForm({ ...editForm, locationName: e.target.value })} placeholder="例如：大安森林公園" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-                  <button type="button" onClick={handleResolveEditPlace} disabled={isResolvingEditPlace || !editForm.locationName.trim()} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
-                    {isResolvingEditPlace ? '查找中...' : '查找座標'}
-                  </button>
-                </div>
-              </label>
-
-              <div className="flex flex-wrap gap-3">
-                <button type="button" onClick={handleUseCurrentLocationForEdit} disabled={isResolvingEditPlace} className="text-sm font-medium text-green-700 hover:text-green-900 disabled:opacity-50">
-                  使用目前位置
-                </button>
-                {(editForm.lat && editForm.lng) && (
-                  <span className="text-xs text-gray-500">已設定座標：{Number(editForm.lat).toFixed(5)}, {Number(editForm.lng).toFixed(5)}</span>
-                )}
-              </div>
-
-              <label className="block">
-                <span className="text-sm font-medium text-gray-700">Google Maps 連結或座標</span>
-                <div className="mt-1 flex gap-2">
-                  <input value={editForm.mapText} onChange={e => setEditForm({ ...editForm, mapText: e.target.value })} placeholder="貼上分享連結，或 25.033, 121.565" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
-                  <button type="button" onClick={handleParseEditMapText} disabled={!editForm.mapText.trim()} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
-                    讀取
-                  </button>
-                </div>
-                <span className="mt-1 block text-xs text-gray-500">手機 Google Maps 可用「分享」複製連結；短網址請先打開後複製展開網址，或直接貼座標。</span>
-              </label>
-
-              <details className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <summary className="cursor-pointer text-sm font-medium text-gray-700">進階座標</summary>
-                <div className="grid sm:grid-cols-2 gap-4 mt-3">
+              <details className="rounded-xl border border-gray-100 bg-gray-50 p-4 group">
+                <summary className="cursor-pointer list-none">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="font-bold text-gray-800">觀察地點</h4>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {editForm.locationName || (editForm.lat && editForm.lng ? '已設定地圖位置' : '尚未設定地點')}
+                      </p>
+                    </div>
+                    <span className="text-sm font-medium text-green-700 group-open:hidden">展開</span>
+                    <span className="text-sm font-medium text-green-700 hidden group-open:inline">收合</span>
+                  </div>
+                </summary>
+                <div className="mt-4 space-y-4">
                   <label className="block">
-                    <span className="text-sm font-medium text-gray-700">緯度</span>
-                    <input type="number" step="any" value={editForm.lat} onChange={e => setEditForm({ ...editForm, lat: e.target.value })} placeholder="例如：25.033" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                    <span className="text-sm font-medium text-gray-700">地點名稱</span>
+                    <div className="mt-1 flex gap-2">
+                      <input value={editForm.locationName} onChange={e => setEditForm({ ...editForm, locationName: e.target.value })} placeholder="例如：大安森林公園" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                      <button type="button" onClick={handleResolveEditPlace} disabled={isResolvingEditPlace || !editForm.locationName.trim()} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
+                        {isResolvingEditPlace ? '查找中...' : '查找座標'}
+                      </button>
+                    </div>
                   </label>
+
+                  <div className="flex flex-wrap gap-3">
+                    <button type="button" onClick={handleUseCurrentLocationForEdit} disabled={isResolvingEditPlace} className="text-sm font-medium text-green-700 hover:text-green-900 disabled:opacity-50">
+                      使用目前位置
+                    </button>
+                    {(editForm.lat && editForm.lng) && (
+                      <span className="text-xs text-gray-500">已設定座標：{Number(editForm.lat).toFixed(5)}, {Number(editForm.lng).toFixed(5)}</span>
+                    )}
+                  </div>
+
                   <label className="block">
-                    <span className="text-sm font-medium text-gray-700">經度</span>
-                    <input type="number" step="any" value={editForm.lng} onChange={e => setEditForm({ ...editForm, lng: e.target.value })} placeholder="例如：121.565" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                    <span className="text-sm font-medium text-gray-700">Google Maps 連結或座標</span>
+                    <div className="mt-1 flex gap-2">
+                      <input value={editForm.mapText} onChange={e => setEditForm({ ...editForm, mapText: e.target.value })} placeholder="貼上分享連結，或 25.033, 121.565" className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                      <button type="button" onClick={handleParseEditMapText} disabled={!editForm.mapText.trim()} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">
+                        讀取
+                      </button>
+                    </div>
+                    <span className="mt-1 block text-xs text-gray-500">手機 Google Maps 可用「分享」複製連結；短網址請先打開後複製展開網址，或直接貼座標。</span>
                   </label>
+
+                  {editForm.lat && editForm.lng && (
+                    <div className="rounded-lg border border-green-100 bg-green-50 p-3 text-sm text-green-800">
+                      <div className="font-medium">已設定位置</div>
+                      <div className="mt-1 text-xs text-green-700">
+                        {editForm.locationName || '未命名地點'}｜{Number(editForm.lat).toFixed(5)}, {Number(editForm.lng).toFixed(5)}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        <a href={googleMapsUrl(editForm.lat, editForm.lng)} target="_blank" rel="noreferrer" className="font-medium text-green-700 hover:text-green-900">
+                          在 Google Maps 開啟
+                        </a>
+                        <button type="button" onClick={handleClearEditLocation} className="font-medium text-red-600 hover:text-red-700">
+                          清除位置
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <details className="rounded-lg border border-gray-200 bg-white p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-gray-700">進階座標</summary>
+                    <div className="grid sm:grid-cols-2 gap-4 mt-3">
+                      <label className="block">
+                        <span className="text-sm font-medium text-gray-700">緯度</span>
+                        <input type="number" step="any" value={editForm.lat} onChange={e => setEditForm({ ...editForm, lat: e.target.value })} placeholder="例如：25.033" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                      </label>
+                      <label className="block">
+                        <span className="text-sm font-medium text-gray-700">經度</span>
+                        <input type="number" step="any" value={editForm.lng} onChange={e => setEditForm({ ...editForm, lng: e.target.value })} placeholder="例如：121.565" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                      </label>
+                    </div>
+                  </details>
                 </div>
               </details>
 

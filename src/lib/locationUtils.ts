@@ -4,6 +4,10 @@ export interface ResolvedPlace {
   lng: number;
 }
 
+export function googleMapsUrl(lat: string | number, lng: string | number) {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+}
+
 export function parseCoordinatesFromText(text: string): ResolvedPlace | null {
   const input = text.trim();
   if (!input) return null;

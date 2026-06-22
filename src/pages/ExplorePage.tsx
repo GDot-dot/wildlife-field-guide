@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, setDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
-import { geocodePlaceName, getBrowserLocation, parseCoordinatesFromText } from '../lib/locationUtils';
+import { geocodePlaceName, getBrowserLocation, googleMapsUrl, parseCoordinatesFromText } from '../lib/locationUtils';
 import { getNearbySpecies, recognizeImageWithAI, refineSpeciesByNameWithAI } from '../services/inaturalist';
 import { Animal } from '../types';
 import { MapPin, Loader2, AlertCircle, Filter, Plus, X, EyeOff, Upload, Search, Sparkles } from 'lucide-react';
@@ -511,6 +511,16 @@ export function ExplorePage() {
     }
   };
 
+  const handleClearCustomLocation = () => {
+    setCustomObservation(prev => ({
+      ...prev,
+      locationName: '',
+      mapText: '',
+      lat: '',
+      lng: '',
+    }));
+  };
+
   const filteredAnimals = animals.filter(animal => {
     if (showUncollectedOnly && collectedIds.has(animal.id)) return false;
     if (rarityFilter !== 'All' && animal.rarity !== rarityFilter) return false;
@@ -879,11 +889,20 @@ export function ExplorePage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-4">
-                <div>
-                  <h4 className="font-bold text-gray-800">觀察時間與地點</h4>
-                  <p className="text-xs text-gray-500 mt-1">可回家後補登，不一定要使用目前 GPS。</p>
-                </div>
+              <details className="rounded-xl border border-gray-100 bg-gray-50 p-4 group">
+                <summary className="cursor-pointer list-none">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="font-bold text-gray-800">觀察時間與地點</h4>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {customObservation.locationName || (customObservation.lat && customObservation.lng ? '已設定地圖位置' : '可回家後補登，不一定要使用目前 GPS。')}
+                      </p>
+                    </div>
+                    <span className="text-sm font-medium text-green-700 group-open:hidden">展開</span>
+                    <span className="text-sm font-medium text-green-700 hidden group-open:inline">收合</span>
+                  </div>
+                </summary>
+                <div className="mt-4 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">觀察日期時間</label>
@@ -943,6 +962,22 @@ export function ExplorePage() {
                   </div>
                   <p className="mt-1 text-xs text-gray-500">手機 Google Maps 可用「分享」複製連結；短網址請先打開後複製展開網址，或直接貼座標。</p>
                 </div>
+                {customObservation.lat && customObservation.lng && (
+                  <div className="rounded-lg border border-green-100 bg-green-50 p-3 text-sm text-green-800">
+                    <div className="font-medium">已設定位置</div>
+                    <div className="mt-1 text-xs text-green-700">
+                      {customObservation.locationName || '未命名地點'}｜{Number(customObservation.lat).toFixed(5)}, {Number(customObservation.lng).toFixed(5)}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-3">
+                      <a href={googleMapsUrl(customObservation.lat, customObservation.lng)} target="_blank" rel="noreferrer" className="font-medium text-green-700 hover:text-green-900">
+                        在 Google Maps 開啟
+                      </a>
+                      <button type="button" onClick={handleClearCustomLocation} className="font-medium text-red-600 hover:text-red-700">
+                        清除位置
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <details className="rounded-lg border border-gray-200 bg-white p-3">
                   <summary className="cursor-pointer text-sm font-medium text-gray-700">進階座標</summary>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
@@ -980,7 +1015,8 @@ export function ExplorePage() {
                     使用目前定位與天氣
                   </button>
                 </div>
-              </div>
+                </div>
+              </details>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">觀察筆記 / 描述</label>
