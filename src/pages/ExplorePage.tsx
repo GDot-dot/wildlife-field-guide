@@ -51,6 +51,12 @@ const fetchCurrentWeather = async (lat: number, lng: number) => {
   return formatWeather(data.current_weather?.weathercode, data.current_weather?.temperature);
 };
 
+const getInitialJournalNote = (animal: Animal) => {
+  if (animal.characteristics && animal.characteristics !== '暫無資料') return animal.characteristics;
+  if (animal.description && !animal.description.startsWith('在您附近被觀察到')) return animal.description;
+  return '';
+};
+
 const loadSavedState = () => {
   try {
     const saved = sessionStorage.getItem(EXPLORE_STATE_KEY);
@@ -257,7 +263,7 @@ export function ExplorePage() {
         locationName: locationName || '',
         weather: currentWeather || '',
         observedAt: new Date().toISOString(),
-        notes: '',
+        notes: getInitialJournalNote(animal),
         collectedAt: serverTimestamp()
       };
       

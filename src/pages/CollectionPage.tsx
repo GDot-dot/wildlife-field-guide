@@ -59,6 +59,19 @@ const toDate = (value: any, fallback = new Date()) => {
 
 const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
 
+const isObservationCountDescription = (text?: string) => {
+  return Boolean(text?.startsWith('在您附近被觀察到') && text.includes('iNaturalist'));
+};
+
+const pickJournalText = (record: Pick<CollectedRecord, 'notes' | 'animal'>) => {
+  if (record.notes?.trim()) return record.notes;
+  if (record.animal.characteristics?.trim() && record.animal.characteristics !== '暫無資料') {
+    return record.animal.characteristics;
+  }
+  if (!isObservationCountDescription(record.animal.description)) return record.animal.description;
+  return '尚未新增觀察筆記。';
+};
+
 const compressImageFile = (file: File) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
   reader.onerror = reject;
@@ -143,7 +156,7 @@ export function CollectionPage() {
           animal,
           collectedAt,
           observedAt,
-          notes: data.notes || '',
+          notes: data.notes || data.characteristics || (!isObservationCountDescription(data.description) ? data.description : ''),
           weather: data.weather || '',
           locationName: data.locationName || '',
           photoUrl: data.photoUrl || animal.imageUrl,
@@ -167,7 +180,7 @@ export function CollectionPage() {
       observedAt: toDateInputValue(record.observedAt),
       weather: record.weather,
       locationName: record.locationName,
-      notes: record.notes,
+      notes: record.notes || (record.animal.characteristics !== '暫無資料' ? record.animal.characteristics || '' : ''),
       photoUrl: record.photoUrl,
     });
   };
@@ -250,7 +263,7 @@ export function CollectionPage() {
     const term = searchTerm.toLowerCase();
     const matchesSearch = record.animal.name.toLowerCase().includes(term) ||
       record.animal.scientificName.toLowerCase().includes(term) ||
-      record.notes.toLowerCase().includes(term) ||
+      pickJournalText(record).toLowerCase().includes(term) ||
       record.locationName.toLowerCase().includes(term);
     const matchesCategory = filterCategory === 'All' || record.animal.category === filterCategory;
     return matchesSearch && matchesCategory;
@@ -297,7 +310,7 @@ export function CollectionPage() {
         </div>
 
         <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 min-h-[68px]">
-          {record.notes || record.animal.description}
+          {pickJournalText(record)}
         </p>
 
         <div className="mt-auto flex gap-2 pt-2">
@@ -427,7 +440,7 @@ export function CollectionPage() {
                             </div>
                             <button onClick={() => openEditor(record)} className="text-sm text-green-700 hover:text-green-900 font-medium">編輯</button>
                           </div>
-                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">{record.notes || record.animal.description}</p>
+                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">{pickJournalText(record)}</p>
                           <div className="text-xs text-gray-500 mt-2">{[record.locationName, record.weather].filter(Boolean).join('｜')}</div>
                         </div>
                       </div>
@@ -481,7 +494,7 @@ export function CollectionPage() {
                             <div className="text-xs text-gray-500 mt-1">{record.observedAt.toLocaleDateString()}</div>
                             {record.locationName && <div className="text-xs text-gray-600 mt-1">地點：{record.locationName}</div>}
                             {record.weather && <div className="text-xs text-gray-600 mt-1">天氣：{record.weather}</div>}
-                            {record.notes && <p className="text-xs text-gray-700 mt-2 line-clamp-3">{record.notes}</p>}
+                            <p className="text-xs text-gray-700 mt-2 line-clamp-3">{pickJournalText(record)}</p>
                             <button onClick={() => openEditor(record)} className="mt-3 w-full rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white">查看 / 編輯紀錄</button>
                           </div>
                         </Popup>
