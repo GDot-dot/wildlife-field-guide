@@ -11,6 +11,7 @@ import { Navbar } from './components/Navbar';
 
 const ExplorePage = lazy(() => import('./pages/ExplorePage').then(module => ({ default: module.ExplorePage })));
 const CollectionPage = lazy(() => import('./pages/CollectionPage').then(module => ({ default: module.CollectionPage })));
+const JournalDetailPage = lazy(() => import('./pages/JournalDetailPage').then(module => ({ default: module.JournalDetailPage })));
 
 function PageFallback() {
   return (
@@ -44,6 +45,7 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<ExplorePage />} />
                   <Route path="/collection" element={<CollectionPage />} />
+                  <Route path="/collection/:recordId" element={<JournalDetailPage />} />
                 </Routes>
               </Suspense>
             </main>

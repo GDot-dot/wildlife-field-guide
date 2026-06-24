@@ -57,6 +57,23 @@ export async function geocodePlaceName(placeName: string): Promise<ResolvedPlace
   };
 }
 
+export async function reverseGeocodeCoordinates(lat: number, lng: number): Promise<string> {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&accept-language=zh-TW`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to reverse geocode coordinates');
+  }
+
+  const data = await response.json();
+  const address = data.address;
+  if (!address) return data.display_name || '地圖選點';
+
+  const city = address.city || address.county || address.state || '';
+  const district = address.town || address.village || address.suburb || address.district || '';
+  const road = address.road || address.path || address.neighbourhood || '';
+  return [city, district, road].filter(Boolean).join('') || data.display_name || '地圖選點';
+}
+
 export async function getBrowserLocation(): Promise<ResolvedPlace> {
   if (!('geolocation' in navigator)) {
     throw new Error('Geolocation is not supported');

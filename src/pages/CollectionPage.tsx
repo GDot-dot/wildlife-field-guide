@@ -3,13 +3,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/errorUtils';
-import { geocodePlaceName, getBrowserLocation, googleMapsUrl, parseCoordinatesFromText } from '../lib/locationUtils';
-import { Link } from 'react-router-dom';
+import { geocodePlaceName, getBrowserLocation, googleMapsUrl, parseCoordinatesFromText, reverseGeocodeCoordinates } from '../lib/locationUtils';
+import { Link, useSearchParams } from 'react-router-dom';
 import { BookOpen, Leaf, Map as MapIcon, PieChart, List, Award, Search, ChevronDown, ChevronUp, CalendarDays, Edit3, X, Upload, Clock, MapPin, CloudSun, CheckCircle2 } from 'lucide-react';
 import { Animal } from '../types';
 import { animals as fallbackAnimals } from '../data/animals';
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -123,8 +123,48 @@ const compressImageFile = (file: File) => new Promise<string>((resolve, reject) 
   reader.readAsDataURL(file);
 });
 
+function MapPickerEvents({ onPick }: { onPick: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(event) {
+      onPick(event.latlng.lat, event.latlng.lng);
+    },
+  });
+  return null;
+}
+
+function LocationPickerMap({ lat, lng, onPick }: { lat: string; lng: string; onPick: (lat: number, lng: number) => void }) {
+  const parsedLat = Number(lat);
+  const parsedLng = Number(lng);
+  const hasPosition = Number.isFinite(parsedLat) && Number.isFinite(parsedLng);
+  const center: [number, number] = hasPosition ? [parsedLat, parsedLng] : [23.7, 121];
+
+  return (
+    <div className="h-64 rounded-lg overflow-hidden border border-gray-200">
+      <MapContainer center={center} zoom={hasPosition ? 15 : 7} style={{ height: '100%', width: '100%' }}>
+        <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <MapPickerEvents onPick={onPick} />
+        {hasPosition && (
+          <Marker
+            position={[parsedLat, parsedLng]}
+            draggable
+            eventHandlers={{
+              dragend(event) {
+                const position = event.target.getLatLng();
+                onPick(position.lat, position.lng);
+              },
+            }}
+          >
+            <Popup>拖曳或點地圖微調位置</Popup>
+          </Marker>
+        )}
+      </MapContainer>
+    </div>
+  );
+}
+
 export function CollectionPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [collectedRecords, setCollectedRecords] = useState<CollectedRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<CollectionTab>('list');
@@ -195,6 +235,16 @@ export function CollectionPage() {
 
     return () => unsubscribe();
   }, [user]);
+
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || collectedRecords.length === 0) return;
+    const record = collectedRecords.find(item => item.id === editId);
+    if (record) {
+      openEditor(record);
+      setSearchParams({});
+    }
+  }, [collectedRecords, searchParams, setSearchParams]);
 
   const openEditor = (record: CollectedRecord) => {
     setEditingRecord(record);
@@ -306,6 +356,24 @@ export function CollectionPage() {
       lat: '',
       lng: '',
     }));
+  };
+
+  const handlePickEditLocation = async (lat: number, lng: number) => {
+    setEditForm(prev => ({
+      ...prev,
+      lat: String(lat),
+      lng: String(lng),
+    }));
+
+    try {
+      const name = await reverseGeocodeCoordinates(lat, lng);
+      setEditForm(prev => ({
+        ...prev,
+        locationName: prev.locationName || name,
+      }));
+    } catch (error) {
+      // Coordinates are still useful even if reverse geocoding fails.
+    }
   };
 
   if (!user) {
@@ -454,6 +522,9 @@ export function CollectionPage() {
           </div>
 
           <div className="mt-auto flex gap-2 pt-4 border-t border-gray-50">
+            <Link to={`/collection/${encodeURIComponent(record.id)}`} className="flex-1 inline-flex items-center justify-center rounded-xl bg-white border border-green-100 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50">
+              查看詳情
+            </Link>
             <button onClick={() => openEditor(record)} className="flex-1 inline-flex items-center justify-center rounded-xl bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100">
               <Edit3 className="w-4 h-4 mr-1.5" />
               編輯日誌
@@ -579,7 +650,10 @@ export function CollectionPage() {
                               <div className="text-xs text-green-700 font-medium mb-1">{record.observedAt.toLocaleDateString()}</div>
                               <h3 className="font-bold text-gray-900">{record.animal.name}</h3>
                             </div>
-                            <button onClick={() => openEditor(record)} className="text-sm text-green-700 hover:text-green-900 font-medium">編輯</button>
+                            <div className="flex gap-3">
+                              <Link to={`/collection/${encodeURIComponent(record.id)}`} className="text-sm text-green-700 hover:text-green-900 font-medium">詳情</Link>
+                              <button onClick={() => openEditor(record)} className="text-sm text-green-700 hover:text-green-900 font-medium">編輯</button>
+                            </div>
                           </div>
                           <p className="text-sm text-gray-600 mt-1 line-clamp-2">{pickJournalText(record)}</p>
                           <div className="text-xs text-gray-500 mt-2">{[record.locationName, record.weather].filter(Boolean).join('｜')}</div>
@@ -636,7 +710,10 @@ export function CollectionPage() {
                             {record.locationName && <div className="text-xs text-gray-600 mt-1">地點：{record.locationName}</div>}
                             {record.weather && <div className="text-xs text-gray-600 mt-1">天氣：{record.weather}</div>}
                             <p className="text-xs text-gray-700 mt-2 line-clamp-3">{pickJournalText(record)}</p>
-                            <button onClick={() => openEditor(record)} className="mt-3 w-full rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white">查看 / 編輯紀錄</button>
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <Link to={`/collection/${encodeURIComponent(record.id)}`} className="rounded-md bg-green-600 px-3 py-1.5 text-center text-xs font-medium text-white">詳情</Link>
+                              <button onClick={() => openEditor(record)} className="rounded-md bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700">編輯</button>
+                            </div>
                           </div>
                         </Popup>
                       </Marker>
@@ -746,6 +823,14 @@ export function CollectionPage() {
                         <span className="text-sm font-medium text-gray-700">經度</span>
                         <input type="number" step="any" value={editForm.lng} onChange={e => setEditForm({ ...editForm, lng: e.target.value })} placeholder="例如：121.565" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
                       </label>
+                    </div>
+                  </details>
+
+                  <details className="rounded-lg border border-gray-200 bg-white p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-gray-700">地圖選點</summary>
+                    <div className="mt-3 space-y-2">
+                      <LocationPickerMap lat={editForm.lat} lng={editForm.lng} onPick={handlePickEditLocation} />
+                      <p className="text-xs text-gray-500">點地圖設定位置；已有標記時也可以拖曳微調。</p>
                     </div>
                   </details>
                 </div>
